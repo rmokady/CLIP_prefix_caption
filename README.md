@@ -9,6 +9,24 @@ Image captioning used to be a very complicated tasks, usually a pretrained detec
 
 In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was already trained over an extremely large number of images, thus is capable of generating semantic encodings for arbitrary images without additional supervision. To produce meaningful sentences we fine-tune a pretrained language model, as been proven to be successful for other natural language tasks. The key idea is to use the CLIP encoding as a prefix to the textual captions by employing a simple Multi Layer Perceptron (MLP) over the raw encoding, and then fine-tune our language model to generate a valid caption.
 
+## COCO Examples
+
+<table>
+  <tr>
+    <td><img src="Images/COCO_val2014_000000562207.jpg" ></td>
+    <td><img src="Images/COCO_val2014_000000165547.jpg" ></td>
+    <td><img src="Images/COCO_val2014_000000579664.jpg" ></td>
+  </tr>
+  <tr>
+    <td>A couple of people standing next to an elephant. </td>
+     <td>A wooden table sitting in front of a window.</td>
+     <td>A bunch of bananas sitting on top of a table.</td>
+  </tr>
+ </table>
+
+
+
+
 
 ## Inference Notebooks
 To help visualize the results  we provide a Colab notebook found in `notebooks/clip_prefix_captioning_inference.ipynb`.   
