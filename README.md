@@ -50,8 +50,11 @@ on images of your choosing. It is recommended to run this in [Google Colab](http
 ## COCO training
 
 Dependencies can be found at the [Inference notebook](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing).
+
 Download [train_captions](https://drive.google.com/file/d/1D3EzUK1d1lNhD2hAvRiKPThidiVbP2K_/view?usp=sharing) to `data/coco/annotations`.
-Download [training images](http://images.cocodataset.org/zips/val2014.zip) and [validation images](http://images.cocodataset.org/zips/train2014.zip) and unzip (Karpathy et el. split).
+
+Download [training images](http://images.cocodataset.org/zips/val2014.zip) and [validation images](http://images.cocodataset.org/zips/train2014.zip) and unzip (We use Karpathy et el. split).
+
 Extract CLIP features using (output is `data/coco/oscar_split_train.pkl`):
 ```
 python parse_coco.py
