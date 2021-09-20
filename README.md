@@ -49,7 +49,14 @@ on images of your choosing. It is recommended to run this in [Google Colab](http
 
 ## COCO training
 
-Dependencies can be found at the [Inference notebook](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing).
+[comment]: <> (Dependencies can be found at the [Inference notebook]&#40;https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing&#41; )
+Clone, create environment and install dependencies:  
+```
+git clone https://github.com/rmokady/CLIP_prefix_caption && cd CLIP_prefix_caption
+conda env create -f environment.yml
+conda activate clip_prefix_caption
+```
+
 
 Download [train_captions](https://drive.google.com/file/d/1D3EzUK1d1lNhD2hAvRiKPThidiVbP2K_/view?usp=sharing) to `data/coco/annotations`.
 
