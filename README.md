@@ -38,7 +38,33 @@ In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was 
  </table>
 
 
+## Conceptual Examples
 
+<table>
+  <tr>
+    <td><img src="Images/CONCEPTUAL_01.jpg" ></td>
+    <td><img src="Images/CONCEPTUAL_02.jpg" ></td>
+    <td><img src="Images/CONCEPTUAL_03.jpg" ></td>
+  </tr>
+  <tr>
+    <td>3D render of a man holding a globe.</td>
+     <td>Students enjoing the cherry blossoms</td>
+     <td>Green leaf of lettuce on a white plate.</td>
+  </tr>
+ </table>
+ 
+ <table>
+  <tr>
+    <td><img src="Images/CONCEPTUAL_04.jpg" ></td>
+    <td><img src="Images/CONCEPTUAL_05.jpg" ></td>
+    <td><img src="Images/CONCEPTUAL_06.jpg" ></td>
+  </tr>
+  <tr>
+    <td>The hotel and casino on the waterfront. </td>
+     <td>The triangle is a symbol of the soul.</td>
+     <td>Cartoon boy in the bath.</td>
+  </tr>
+ </table>
 
 
 ## Inference Notebooks
