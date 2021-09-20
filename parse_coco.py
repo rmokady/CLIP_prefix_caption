@@ -1,13 +1,13 @@
+import torch
 import skimage.io as io
-import clip   # installed from https://github.com/openai/CLIP
+import clip
 from PIL import Image
-from custom_types import *
 import pickle
 import json
 
 
 def main():
-    device = CUDA(0)
+    device = torch.device('cuda:0')
     suffix = "train"
     clip_model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 
@@ -39,8 +39,8 @@ def main():
         all_captions.append(d)
 
         if counter % 10000 == 0:
-             with open(f"./data/coco/oscar_split_{suffix}.pkl", 'wb') as f:
-                 pickle.dump({"clip_embedding": torch.cat(all_embeddings, dim=0), "captions": all_captions}, f)
+            with open(f"./data/coco/oscar_split_{suffix}.pkl", 'wb') as f:
+                pickle.dump({"clip_embedding": torch.cat(all_embeddings, dim=0), "captions": all_captions}, f)
         counter += 1
 
     with open(f"./data/coco/oscar_split_{suffix}.pkl", 'wb') as f:

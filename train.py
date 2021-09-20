@@ -1,12 +1,15 @@
+import torch
+import torch.nn as nn
+from torch.nn import functional as nnf
 from torch.utils.data import Dataset, DataLoader
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, get_linear_schedule_with_warmup
 from tqdm import tqdm
 import os
-from custom_types import *
 import pickle
 import sys
 import argparse
 import json
+from typing import Tuple, Optional, Union
 
 
 class ClipCocoDataset(Dataset):
@@ -29,9 +32,9 @@ class ClipCocoDataset(Dataset):
         mask = torch.cat((torch.ones(self.prefix_length), mask), dim=0)  # adding prefix mask
         return tokens, mask
 
-    def __getitem__(self, item: int) -> TS:
+    def __getitem__(self, item: int) -> Tuple[torch.Tensor, ...]:
         tokens, mask = self.pad_tokens(item)
-        return tokens, mask, self.prefixes[ self.caption2embedding[item]], self.captions[item]
+        return tokens, mask, self.prefixes[self.caption2embedding[item]], self.captions[item]
 
     def __init__(self, data_path: str,  prefix_length: int, gpt2_type: str = "gpt2"):
         self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
@@ -57,21 +60,20 @@ class ClipCocoDataset(Dataset):
                 max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
             # self.max_seq_len = max_seq_len
             with open(f"{data_path[:-4]}_tokens.pkl", 'wb') as f:
-                 pickle.dump([self.captions_tokens, self.caption2embedding, max_seq_len], f)
+                pickle.dump([self.captions_tokens, self.caption2embedding, max_seq_len], f)
         all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
         self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
 
 
-
 class MLP(nn.Module):
 
-    def forward(self, x: T) -> T:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
 
     def __init__(self, sizes: Tuple[int, ...], bias=True, act=nn.Tanh):
         super(MLP, self).__init__()
         layers = []
-        for i in range(len(sizes) -1):
+        for i in range(len(sizes) - 1):
             layers.append(nn.Linear(sizes[i], sizes[i + 1], bias=bias))
             if i < len(sizes) - 2:
                 layers.append(act())
@@ -80,15 +82,13 @@ class MLP(nn.Module):
 
 class ClipCaptionModel(nn.Module):
 
-    #@functools.lru_cache
-    def get_dummy_token(self, batch_size: int, device: D) -> T:
+    def get_dummy_token(self, batch_size: int, device: torch.device) -> torch.Tensor:
         return torch.zeros(batch_size, self.prefix_length, dtype=torch.int64, device=device)
 
-    def forward(self, tokens: T, prefix: T, mask: Optional[T] = None, labels: Optional[T] = None):
+    def forward(self, tokens: torch.Tensor, prefix: torch.Tensor, mask: Optional[torch.Tensor] = None,
+                labels: Optional[torch.Tensor] = None):
         embedding_text = self.gpt.transformer.wte(tokens)
         prefix_projections = self.clip_project(prefix).view(-1, self.prefix_length, self.gpt_embedding_size)
-        #print(embedding_text.size()) #torch.Size([5, 67, 768])
-        #print(prefix_projections.size()) #torch.Size([5, 1, 768])
         embedding_cat = torch.cat((prefix_projections, embedding_text), dim=1)
         if labels is not None:
             dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
@@ -101,10 +101,8 @@ class ClipCaptionModel(nn.Module):
         self.prefix_length = prefix_length
         self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
         self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
-        # if prefix_length > 10:  # not enough memory
-        #     self.clip_project = nn.Linear(prefix_size, self.gpt_embedding_size * prefix_length)
-        # else:
-        self.clip_project = MLP((prefix_size, (self.gpt_embedding_size * prefix_length) // 2, self.gpt_embedding_size * prefix_length))
+        self.clip_project = MLP((prefix_size, (self.gpt_embedding_size * prefix_length) // 2,
+                                 self.gpt_embedding_size * prefix_length))
 
 
 class ClipCaptionPrefix(ClipCaptionModel):
@@ -142,16 +140,18 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = '_latest'):
         model = ClipCaptionModel(args.prefix_length)
     if os.path.isfile(model_path):
         print(f"loading model from {model_path}")
-        model.load_state_dict(torch.load(model_path, map_location=CPU))
+        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
     else:
         print(f"{model_path} is not exist")
     return model, parser
 
 
-def train(dataset: ClipCocoDataset, model: ClipCaptionModel, batch_size: int,
-          epochs: int, lr: float=2e-5, warmup_steps: int = 5000, output_dir: str = ".", output_prefix: str = "",
-          save_model_on_epoch: bool = True, args=None):
-    device = CUDA(0)
+def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
+          lr: float = 2e-5, warmup_steps: int = 5000, output_dir: str = ".", output_prefix: str = ""):
+
+    device = torch.device('cuda:0')
+    batch_size = args.bs
+    epochs = args.epochs
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     model = model.to(device)
@@ -189,12 +189,10 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, batch_size: int,
                 model.state_dict(),
                 os.path.join(output_dir, f"{output_prefix}-{epoch:03d}.pt"),
             )
-
     return model
 
 
 def main():
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', default='./data/coco/oscar_split_train.pkl')
     parser.add_argument('--out_dir', default='./checkpoints')
@@ -206,8 +204,6 @@ def main():
     parser.add_argument('--only_prefix', dest='only_prefix', action='store_true')
     parser.set_defaults(only_prefix=False)
     args = parser.parse_args()
-    batch_size = args.bs
-    num_epochs = args.epochs
     prefix_length = args.prefix_length
     dataset = ClipCocoDataset(args.data, prefix_length)
     if args.only_prefix:
@@ -217,7 +213,7 @@ def main():
         model = ClipCaptionModel(prefix_length)
         print("Train both prefix and GPT")
         sys.stdout.flush()
-    train(dataset, model, batch_size, num_epochs, output_dir=args.out_dir, output_prefix=args.prefix, args=args)
+    train(dataset, model, args, output_dir=args.out_dir, output_prefix=args.prefix)
 
 
 if __name__ == '__main__':
