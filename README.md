@@ -98,7 +98,28 @@ Train:
 python train.py --data ./data/coco/oscar_split_train.pkl --out_dir ./coco_train/
 ```
 
+## Qualitative results
 
+### COCO dataset
+
+
+| Method  | BLEU@1 | BLEU@2 |  BLEU@3 | BLEU@4 | METEOR | ROUGE-L | CIDEr | SPICE |
+| ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
+| [Oscar](https://arxiv.org/abs/2004.06165)*  | 75.59  | 60.09 | 46.89 | 36.58 | 30.40 | 58.56 | 124.12 | 23.17 |
+| Ours  | 74.12 | 57.40 | 43.11 | 32.15 | 27.10 | 55.02 | 108.35 | 20.12 |
+
+
+\* uses additional object annotations for training.
+
+
+### Conceptual Captions dataset
+
+
+
+| Method  | ROUGE-L | CIDEr | SPICE |
+| ------------- | ------------- | ------------- | ------------- |
+| [VLP](https://arxiv.org/abs/1909.11059) | 24.35 | 77.57 | 16.59 | 
+| Ours | 26.71 | 87.26 | 18.5| 
 
 
 ## Acknowledgments
