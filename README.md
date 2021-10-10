@@ -3,7 +3,7 @@
 <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>  
 Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" height=20></a>  
 
- :partying_face: ***New:***  :partying_face: Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption?published=1) using replicate.ai UI
+ :partying_face: ***New:***  :partying_face: Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption) using replicate.ai UI
 
 
 ## Description  
@@ -77,7 +77,7 @@ on images of your choosing. It is recommended to run this in [Google Colab](http
 
 
 ## Inference GUI
-Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption?published=1) using replicate.ai UI.
+Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption) using replicate.ai UI.
 
 
 ## COCO training
