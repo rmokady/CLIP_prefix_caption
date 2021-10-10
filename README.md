@@ -129,7 +129,7 @@ python train.py --data ./data/coco/oscar_split_train.pkl --out_dir ./coco_train/
 
 
 ## Acknowledgments
-This project was created by Ron Mokady and Amir Hertz Advanced-NLP course by Omer Levy @ TAU.
+This project was created by Ron Mokady and Amir Hertz for the Advanced-NLP course by Omer Levy @ TAU.
 This repository is heavily based on [CLIP](https://github.com/openai/CLIP) and [Hugging-faces](https://github.com/huggingface/transformers) repositories.
 For training we used the data of [COCO dataset](https://cocodataset.org/#home) and [Conceptual Captions](https://ai.google.com/research/ConceptualCaptions/).
 The project was also inspired from [this paper](https://arxiv.org/abs/2101.00190).
