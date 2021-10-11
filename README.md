@@ -4,6 +4,7 @@
 Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" height=20></a>  
 
  :partying_face: ***New:*** :partying_face: Integrated to [Huggingface Spaces](https://huggingface.co/spaces) with [Gradio](https://github.com/gradio-app/gradio). See demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/CLIP_prefix_captioning)
+ 
  :partying_face: ***New:***  :partying_face: Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption) using replicate.ai UI
 
 
