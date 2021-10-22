@@ -95,7 +95,7 @@ conda activate clip_prefix_caption
 
 Download [train_captions](https://drive.google.com/file/d/1D3EzUK1d1lNhD2hAvRiKPThidiVbP2K_/view?usp=sharing) to `data/coco/annotations`.
 
-Download [training images](http://images.cocodataset.org/zips/val2014.zip) and [validation images](http://images.cocodataset.org/zips/train2014.zip) and unzip (We use Karpathy et el. split).
+Download [training images](http://images.cocodataset.org/zips/train2014.zip) and [validation images](http://images.cocodataset.org/zips/val2014.zip) and unzip (We use Karpathy et el. split).
 
 Extract CLIP features using (output is `data/coco/oscar_split_train.pkl`):
 ```
