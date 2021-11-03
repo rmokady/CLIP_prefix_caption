@@ -75,7 +75,7 @@ In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was 
 To help visualize the results we provide a Colab notebook found in `notebooks/clip_prefix_captioning_inference.ipynb`.   
 The notebook will download the pretrained models and run inference on a sample images or 
 on images of your choosing. It is recommended to run this in [Google Colab](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing).
-**Both COCO and Conceptual Captions pretrained models are available.**
+**Both [COCO](https://drive.google.com/file/d/1IdaBtMSvtyzF0ByVaBHtvM0JYSXRExRX/view?usp=sharing) and [Conceptual Captions](https://drive.google.com/file/d/14pXWwB4Zm82rsDdvbGguLfx9F8aM7ovT/view?usp=sharing) pretrained models are available.**
 
 
 ## Inference GUI
