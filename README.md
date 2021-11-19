@@ -3,15 +3,23 @@
 <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>  
 Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" height=20></a>  
 
- :partying_face: ***New:*** :partying_face: Integrated to [Huggingface Spaces](https://huggingface.co/spaces) with [Gradio](https://github.com/gradio-app/gradio). See demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/CLIP_prefix_captioning)
- 
- :partying_face: ***New:***  :partying_face: Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption) using replicate.ai UI
+
+
+:partying_face: ***New:*** :partying_face: Our [technical papar](https://arxiv.org/abs/2111.09734) is finally out!
+
+
+
+
+## Official implementation for the paper ["ClipCap: CLIP Prefix for Image Captioning"](https://arxiv.org/abs/2111.09734)
+
+
+## Code for the transformer mapping network will be released soon...
 
 
 ## Description  
-Image captioning is a complicated task, where usually a pretrained detection network is used, requires additional supervision in the form of object annotation. The features of the detected objects are then fed to an additional network that is trained to output the correct caption. We present a new approach that does not requires additional information (i.e. requires only images and captions), thus can be applied to any data. In addition, our model's training time is much faster than similar methods while achieving close to state-of-the-art results, even for the Conceptual Captions dataset contains over 3M images. 
+Image captioning is a complicated task, where usually a pretrained detection network is used, requires additional supervision in the form of object annotation. We present a new approach that does not requires additional information (i.e. requires only images and captions), thus can be applied to any data. In addition, our model's training time is much faster than similar methods while achieving comparable to state-of-the-art results, even for the Conceptual Captions dataset contains over 3M images. 
 
-In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was already trained over an extremely large number of images, thus is capable of generating semantic encodings for arbitrary images without additional supervision. To produce meaningful sentences we fine-tune a pretrained language model, which has been proven to be successful for other natural language tasks. The key idea is to use the CLIP encoding as a prefix to the textual captions by employing a simple Multi-Layer Perceptron (MLP) over the raw encoding, and then fine-tune our language model to generate a valid caption.
+In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was already trained over an extremely large number of images, thus is capable of generating semantic encodings for arbitrary images without additional supervision. To produce meaningful sentences we fine-tune a pretrained language model, which has been proven to be successful for other natural language tasks. The key idea is to use the CLIP encoding as a prefix to the textual captions by employing a simple mapping network over the raw encoding, and then fine-tune our language model to generate a valid caption. In addition, we present another variant, where we utilize a transformer architecture for the mapping network and avoid the fine-tuning of GPT-2. Still, our light model achieve comaparable to state-of-the-art over nocaps dataset.
 
 ## COCO Examples
 
@@ -79,7 +87,8 @@ on images of your choosing. It is recommended to run this in [Google Colab](http
 
 
 ## Inference GUI
-Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption) using replicate.ai UI.
+1. Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption) using replicate.ai UI.
+2. Integrated to [Huggingface Spaces](https://huggingface.co/spaces) with [Gradio](https://github.com/gradio-app/gradio). See demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/CLIP_prefix_captioning) (currently not supporting beam search)
 
 
 ## COCO training
@@ -106,35 +115,23 @@ Train:
 python train.py --data ./data/coco/oscar_split_train.pkl --out_dir ./coco_train/
 ```
 
-## Qualitative results
-
-### COCO dataset
-
-
-| Method  | BLEU@1 | BLEU@2 |  BLEU@3 | BLEU@4 | METEOR | ROUGE-L | CIDEr | SPICE |
-| ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
-| [Oscar](https://arxiv.org/abs/2004.06165)*  | 75.59  | 60.09 | 46.89 | 36.58 | 30.40 | 58.56 | 124.12 | 23.17 |
-| Ours  | 74.12 | 57.40 | 43.11 | 32.15 | 27.10 | 55.02 | 108.35 | 20.12 |
-
-
-\* uses additional object annotations for training.
+## Citation
+If you use this code for your research, please cite:
+```
+@article{mokady2021pivotal,
+  title={ClipCap: CLIP Prefix for Image Captioning},
+  author={Mokady, Ron and Hertz, Amir and Bermano, Amit H},
+  journal={arXiv preprint arXiv:2111.09734},
+  year={2021}
+}
+```
 
 
-### Conceptual Captions dataset
-
-
-
-| Method  | ROUGE-L | CIDEr | SPICE |
-| ------------- | ------------- | ------------- | ------------- |
-| [VLP](https://arxiv.org/abs/1909.11059) | 24.35 | 77.57 | 16.59 | 
-| Ours | 26.71 | 87.26 | 18.5| 
 
 
 ## Acknowledgments
-This project was created by Ron Mokady and Amir Hertz for the Advanced-NLP course by Omer Levy @ TAU.
 This repository is heavily based on [CLIP](https://github.com/openai/CLIP) and [Hugging-faces](https://github.com/huggingface/transformers) repositories.
 For training we used the data of [COCO dataset](https://cocodataset.org/#home) and [Conceptual Captions](https://ai.google.com/research/ConceptualCaptions/).
-The project was also inspired from [this paper](https://arxiv.org/abs/2101.00190).
 
 ## Contact
 For any inquiry please contact us at our email addresses: ron.mokady@gmail.com or amirhertz@mail.tau.ac.il.
