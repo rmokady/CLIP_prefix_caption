@@ -118,7 +118,7 @@ python train.py --data ./data/coco/oscar_split_train.pkl --out_dir ./coco_train/
 ## Citation
 If you use this code for your research, please cite:
 ```
-@article{mokady2021pivotal,
+@article{mokady2021clipcap,
   title={ClipCap: CLIP Prefix for Image Captioning},
   author={Mokady, Ron and Hertz, Amir and Bermano, Amit H},
   journal={arXiv preprint arXiv:2111.09734},
