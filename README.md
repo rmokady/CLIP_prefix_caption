@@ -110,10 +110,16 @@ Extract CLIP features using (output is `data/coco/oscar_split_train.pkl`):
 ```
 python parse_coco.py
 ```
-Train:
+Train with fine-tuning of GPT2:
 ```
 python train.py --data ./data/coco/oscar_split_train.pkl --out_dir ./coco_train/
 ```
+
+Train only transformer mapping network:
+```
+python --only_prefix train.py --data ./data/coco/oscar_split_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
+```
+
 
 ## Citation
 If you use this code for your research, please cite:
