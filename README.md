@@ -4,8 +4,9 @@
 Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" height=20></a>  
 
 
+:partying_face: ***New:*** :partying_face:  Code for the transformer mapping network is now available.
 
-:partying_face: ***New:*** :partying_face: Our [technical papar](https://arxiv.org/abs/2111.09734) is finally out!
+:partying_face: ***New:*** :partying_face:  Our [technical papar](https://arxiv.org/abs/2111.09734) is finally out!
 
 
 
@@ -13,7 +14,6 @@ Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC
 ## Official implementation for the paper ["ClipCap: CLIP Prefix for Image Captioning"](https://arxiv.org/abs/2111.09734)
 
 
-## Code for the transformer mapping network will be released soon...
 
 
 ## Description  
@@ -84,6 +84,8 @@ To help visualize the results we provide a Colab notebook found in `notebooks/cl
 The notebook will download the pretrained models and run inference on a sample images or 
 on images of your choosing. It is recommended to run this in [Google Colab](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing).
 **Both [COCO](https://drive.google.com/file/d/1IdaBtMSvtyzF0ByVaBHtvM0JYSXRExRX/view?usp=sharing) and [Conceptual Captions](https://drive.google.com/file/d/14pXWwB4Zm82rsDdvbGguLfx9F8aM7ovT/view?usp=sharing) pretrained models are available.**
+
+Inference notebook for the **transformer mapping network (without fine-tune GPT-2)** can be found [here](https://colab.research.google.com/drive/180L3rMFmGujudwO1EJNF-lHIpAsAZ5xq?usp=sharing) for the COCO model.
 
 
 ## Inference GUI
