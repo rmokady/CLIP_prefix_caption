@@ -93,7 +93,7 @@ Inference notebook for the **transformer mapping network (without fine-tune GPT-
 2. Integrated to [Huggingface Spaces](https://huggingface.co/spaces) with [Gradio](https://github.com/gradio-app/gradio). See demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/CLIP_prefix_captioning) (currently not supporting beam search)
 
 
-## COCO training
+## Training prerequisites
 
 [comment]: <> (Dependencies can be found at the [Inference notebook]&#40;https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing&#41; )
 Clone, create environment and install dependencies:  
@@ -103,6 +103,7 @@ conda env create -f environment.yml
 conda activate clip_prefix_caption
 ```
 
+## COCO training
 
 Download [train_captions](https://drive.google.com/file/d/1D3EzUK1d1lNhD2hAvRiKPThidiVbP2K_/view?usp=sharing) to `data/coco/annotations`.
 
@@ -130,6 +131,22 @@ python parse_coco.py --clip_model_type RN50x4
 ```
 python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
 ```
+
+## Conceptual training
+
+Download the .TSV train/val files from [Conceptual Captions](https://ai.google.com/research/ConceptualCaptions/download) and place them under <data_root> directory.
+
+Download the images and extract CLIP features using (outputs are `<data_root>/conceptual_clip_ViT-B_32_train.pkl` and  `<data_root>/conceptual_clip_ViT-B_32_val.pkl`):
+```
+python parse_conceptual.py --clip_model_type ViT-B/32 --data_root <data_root> --num_threads 16
+```
+Notice, downloading the images might take a few days.
+
+Train with fine-tuning of GPT2:
+```
+python train.py --data <data_root>/conceptual_clip_ViT-B_32_train.pkl --out_dir ./conceptual_train/
+```
+Similarly to the COCO training, you can train a transformer mapping network, and / or parse the images using a ResNet-based CLIP. 
 
 ## Citation
 If you use this code for your research, please cite:
