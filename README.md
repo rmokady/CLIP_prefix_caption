@@ -110,11 +110,11 @@ Download [training images](http://images.cocodataset.org/zips/train2014.zip) and
 
 Extract CLIP features using (output is `data/coco/oscar_split_train.pkl`):
 ```
-python parse_coco.py
+python parse_coco.py --clip_model_type ViT-B/32
 ```
 Train with fine-tuning of GPT2:
 ```
-python train.py --data ./data/coco/oscar_split_train.pkl --out_dir ./coco_train/
+python train.py --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/
 ```
 
 Train only transformer mapping network:

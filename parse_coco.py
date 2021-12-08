@@ -6,12 +6,14 @@ import pickle
 import json
 import os
 from tqdm import tqdm
+import argparse
 
 
-def main():
+def main(clip_model_type: str):
     device = torch.device('cuda:0')
-    out_path = "./data/coco/oscar_split_train.pkl"
-    clip_model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+    clip_model_name = clip_model_type.replace('/', '_')
+    out_path = f"./data/coco/oscar_split_{clip_model_name}_train.pkl"
+    clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
     with open('./data/coco/annotations/train_caption.json', 'r') as f:
         data = json.load(f)
     print("%0d captions loaded from json " % len(data))
@@ -43,4 +45,7 @@ def main():
 
 
 if __name__ == '__main__':
-    exit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--clip_model_type', default="ViT-B/32", choices=('RN50', 'RN101', 'RN50x4', 'ViT-B/32'))
+    args = parser.parse_args()
+    exit(main(args.clip_model_type))

@@ -164,18 +164,19 @@ def add_period(caption: str):
     return caption
 
 
-def create_clip_embeddings(conceptual_root: str):
+def create_clip_embeddings(conceptual_root: str, clip_model_type: str):
     all_embeddings = []
     all_captions = []
     for suffix in ("val", "train"):
         device = torch.device("cuda:0")
-        clip_model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+        clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
         clip_model = clip_model.eval()
         ds = ConceptualDS(conceptual_root, preprocess, suffix)
         dl = DataLoader(ds, batch_size=200, shuffle=False, num_workers=8, drop_last=False)
         progress = tqdm(total=len(dl))
         counter = 0
-        out_data_path = f"{conceptual_root}/conceptual_clip_{suffix}.pkl"
+        clip_model_name = clip_model_type.replace('/', '_')
+        out_data_path = f"{conceptual_root}/conceptual_clip_{clip_model_name}_{suffix}.pkl"
         recover_index = 0
         for i, data in enumerate(dl):
             images, captions, image_names = data
@@ -203,10 +204,11 @@ def create_clip_embeddings(conceptual_root: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_root', default='./data/conceptual')
+    parser.add_argument('--clip_model_type', default="ViT-B/32", choices=('RN50', 'RN101', 'RN50x4', 'ViT-B/32'))
     parser.add_argument('--num_threads', type=int, default=16)
     args = parser.parse_args()
     download_conceptual(args.data_root, args.num_threads)
-    create_clip_embeddings(args.data_root)
+    create_clip_embeddings(args.data_root, args.clip_model_type)
 
 
 if __name__ == '__main__':
