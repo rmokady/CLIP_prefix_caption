@@ -123,7 +123,7 @@ python train.py --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./co
 
 Train only transformer mapping network:
 ```
-python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
+python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40
 ```
 
 **If you wish to use ResNet-based CLIP:** 
