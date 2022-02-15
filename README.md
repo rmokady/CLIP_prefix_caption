@@ -4,10 +4,6 @@
 Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" height=20></a>  
 
 
-:partying_face: ***New:*** :partying_face:  Code for the transformer mapping network is now available.
-
-:partying_face: ***New:*** :partying_face:  Our [technical paper](https://arxiv.org/abs/2111.09734) is finally out!
-
 
 
 
