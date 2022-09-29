@@ -1,7 +1,7 @@
 # Prediction interface for Cog ⚙️
 # Reference: https://github.com/replicate/cog/blob/main/docs/python.md
 
-import clip
+
 import os
 from torch import nn
 import numpy as np
@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as nnf
 import sys
 from typing import Tuple, List, Union, Optional
+import clip
 from transformers import (
     GPT2Tokenizer,
     GPT2LMHeadModel,
@@ -18,9 +19,8 @@ from transformers import (
 import skimage.io as io
 import PIL.Image
 
-import cog
+from cog import BasePredictor, Path, Input
 
-# import torch
 
 N = type(None)
 V = np.array
@@ -45,7 +45,7 @@ D = torch.device
 CPU = torch.device("cpu")
 
 
-class Predictor(cog.Predictor):
+class Predictor(BasePredictor):
     def setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
         self.device = torch.device("cuda")
@@ -63,21 +63,21 @@ class Predictor(cog.Predictor):
             model = model.to(self.device)
             self.models[key] = model
 
-    @cog.input("image", type=cog.Path, help="Input image")
-    @cog.input(
-        "model",
-        type=str,
-        options=WEIGHTS_PATHS.keys(),
-        default="coco",
-        help="Model to use",
-    )
-    @cog.input(
-        "use_beam_search",
-        type=bool,
-        default=False,
-        help="Whether to apply beam search to generate the output text",
-    )
-    def predict(self, image, model, use_beam_search):
+    def predict(
+        self,
+        image: Path = Input(
+            description="Input image",
+        ),
+        model: str = Input(
+            choices=WEIGHTS_PATHS.keys(),
+            default="coco",
+            description="Choose a model",
+        ),
+        use_beam_search: bool = Input(
+            default=False,
+            description="Whether to apply beam search to generate the output text",
+        ),
+    ) -> str:
         """Run a single prediction on the model"""
         image = io.imread(image)
         model = self.models[model]
