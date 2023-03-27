@@ -9,14 +9,20 @@ import torch
 import torch.nn.functional as nnf
 import sys
 from typing import Tuple, List, Union, Optional
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, get_linear_schedule_with_warmup
-from transformers import AutoTokenizer # OPTForCausalLM
-from modeling_opt_pp import OPTForCausalLM
-from configuration_opt_pp import OPTConfig
+# from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, get_linear_schedule_with_warmup
+from transformers import OPTForCausalLM, AdamW, get_linear_schedule_with_warmup
+from transformers import AutoTokenizer
 import skimage.io as io
 import PIL.Image
 
 import cog
+
+
+import os
+from tqdm import tqdm
+import pandas as pd
+import json
+import torch
 
 # import torch
 
@@ -34,59 +40,32 @@ TNS = Union[Tuple[TN, ...], List[TN]]
 TSN = Optional[TS]
 TA = Union[T, ARRAY]
 
-# WEIGHTS_PATHS = {
-#     "coco_gpt": "coco_train/gpt-finetuned/coco_prefix-009.pt",
-#     "coco_gpt008": "coco_train/gpt-finetuned/coco_prefix-008.pt",
-#     # "conceptual-captions": "conceptual_weights.pt",
-# }
-
-def direct_weiht_paths(language_model):
-    if language_model == 'gpt2':
-        WEIGHTS_PATHS = {
-            "coco": "/data/daisy/clipcap_output/gpt2_32quries/coco_prefix-009.pt",
-            "coco_gpt008": "/data/daisy/clipcap_output/gpt-finetuned/coco_prefix-008.pt",
-        }
-        print('your language model is : GPT-2')
-        return WEIGHTS_PATHS
-    elif language_model == 'opt':
-        WEIGHTS_PATHS = {
-        "coco": "/data/daisy/clipcap_output/opt_32quries/coco_prefix-018.pt",
-        "coco_gpt008": "/data/daisy/clipcap_output/opt_32quries/coco_prefix-009.pt",
-        }
-        print('your language model is : OPT')
-        return WEIGHTS_PATHS
-
-WEIGHTS_PATHS = direct_weiht_paths('opt')
-
+WEIGHTS_PATHS = {
+    "coco_opt": "coco_train/opt-finetuned/coco_prefix-009.pt",
+    "coco": "coco_train/opt-finetuned/coco_prefix-008.pt",
+    # "conceptual-captions": "conceptual_weights.pt",
+}
 
 D = torch.device
 CPU = torch.device("cpu")
-OPT_MODEL = 'facebook/opt-125m'
+
 
 class Predictor(cog.Predictor):
-    def setup(self, language_model='opt', prefix_length=32, device1=torch.device("cuda:2"), device2=torch.device("cuda:3")):
+    def setup(self):
         """Load the model into memory to make running multiple predictions efficient"""
-        # self.device = torch.device("cuda")
-        self.device1 = device1
-        self.device2 = device2
+        self.device = torch.device("cuda")
         self.clip_model, self.preprocess = clip.load(
-            "ViT-B/32", device=self.device1, jit=False
+            "ViT-B/32", device=self.device, jit=False
         )
-        
-        self.language_model = language_model
-        if self.language_model == 'gpt2':
-            self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        elif self.language_model == 'opt':
-            self.tokenizer = AutoTokenizer.from_pretrained(OPT_MODEL)
+        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
         self.models = {}
-        self.prefix_length = prefix_length
+        self.prefix_length = 40 #10
         for key, weights_path in WEIGHTS_PATHS.items():
-            
-            model = ClipCaptionModel(self.prefix_length, language_model=self.language_model, device1=self.device1, device2=self.device2)
-            model.load_state_dict(torch.load(weights_path)) #, map_location=CPU))
+            model = ClipCaptionModel(self.prefix_length)
+            model.load_state_dict(torch.load(weights_path, map_location=CPU))
             model = model.eval()
-            # model = model.to(self.device)
+            model = model.to(self.device)
             self.models[key] = model
 
     @cog.input("image", type=cog.Path, help="Input image")
@@ -108,17 +87,31 @@ class Predictor(cog.Predictor):
         image = io.imread(image)
         model = self.models[model]
         pil_image = PIL.Image.fromarray(image)
-        image = self.preprocess(pil_image).unsqueeze(0).to(self.device1)
+        image = self.preprocess(pil_image).unsqueeze(0).to(self.device)
         with torch.no_grad():
             prefix = self.clip_model.encode_image(image).to(
-                self.device1, dtype=torch.float32
+                self.device, dtype=torch.float32
             )
             prefix_embed = model.clip_project(prefix).reshape(1, self.prefix_length, -1)
-            
         if use_beam_search:
-            return generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
+            return generate_beam(model, self.tokenizer, embed=prefix_embed)[0], prefix_embed
         else:
-            return generate2(model, self.tokenizer, embed=prefix_embed)
+            return generate2(model, self.tokenizer, embed=prefix_embed), prefix_embed
+
+
+class MLP(nn.Module):
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
+
+    def __init__(self, sizes: Tuple[int, ...], bias=True, act=nn.Tanh):
+        super(MLP, self).__init__()
+        layers = []
+        for i in range(len(sizes) - 1):
+            layers.append(nn.Linear(sizes[i], sizes[i + 1], bias=bias))
+            if i < len(sizes) - 2:
+                layers.append(act())
+        self.model = nn.Sequential(*layers)
 
 
 class MlpTransformer(nn.Module):
@@ -244,7 +237,7 @@ class TransformerMapper(nn.Module):
         self.transformer = Transformer(dim_embedding, 8, num_layers)
         self.linear = nn.Linear(dim_clip, clip_length * dim_embedding)
         self.prefix_const = nn.Parameter(torch.randn(prefix_length, dim_embedding), requires_grad=True)
-
+        
 
 class ClipCaptionModel(nn.Module):
 
@@ -253,40 +246,27 @@ class ClipCaptionModel(nn.Module):
 
     def forward(self, tokens: torch.Tensor, prefix: torch.Tensor, mask: Optional[torch.Tensor] = None,
                 labels: Optional[torch.Tensor] = None):
-        if self.language_model == 'gpt2':
-            embedding_text = self.gpt.transformer.wte(tokens)
-        elif self.language_model == 'opt':
-            embedding_text = self.gpt.model.embed_tokens(tokens)
+        # embedding_text = self.gpt.transformer.wte(tokens)
+        embedding_text = self.gpt.model.decoder.embed_tokens(tokens) # 수정
         prefix_projections = self.clip_project(prefix).view(-1, self.prefix_length, self.gpt_embedding_size)
-        embedding_cat = torch.cat((prefix_projections, embedding_text.to(self.device1)), dim=1)
+        embedding_cat = torch.cat((prefix_projections, embedding_text), dim=1)
         if labels is not None:
             dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
             labels = torch.cat((dummy_token, tokens), dim=1)
         out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
-        return out.to(self.device1)
+        return out
 
-    def __init__(self, prefix_length: int, language_model='gpt2', clip_length: Optional[int] = 32, prefix_size: int = 512,
-                 num_layers: int = 8, device1=torch.device("cuda:2"), device2=torch.device("cuda:3")):
+    def __init__(self, prefix_length: int, clip_length: Optional[int] = None, prefix_size: int = 512,
+                 num_layers: int = 8):
         super(ClipCaptionModel, self).__init__()
         self.prefix_length = prefix_length
-        self.language_model = language_model
-        self.prefix_size=prefix_size
-        self.clip_length = clip_length
-        self.num_layers = num_layers
-        self.device1 = device1
-        self.device2 = device2
-        
-        if self.language_model == 'gpt2':
-            self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
-            self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
-        elif self.language_model == 'opt':
-            print('clipcaption - LM : OPT')
-            self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL)
-            self.gpt_embedding_size = self.gpt.model.decoder.embed_tokens.weight.shape[1]
-            self.gpt.setting_device(device1 = self.device1, device2 = self.device2)
-
-        self.clip_project = TransformerMapper(dim_clip=self.prefix_size, dim_embedding=self.gpt_embedding_size, 
-                                              prefix_length=self.prefix_length, clip_length=self.clip_length, num_layers=self.num_layers).to(self.device1)
+        # self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
+        print('LM Model : opt-2.7b')
+        self.gpt = OPTForCausalLM.from_pretrained('facebook/opt-2.7b') # edit_
+        # self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
+        self.gpt_embedding_size = self.gpt.lm_head.in_features
+        self.clip_project = TransformerMapper(prefix_size, self.gpt_embedding_size, prefix_length,
+                                                                     clip_length, num_layers)
 
 
 class ClipCaptionPrefix(ClipCaptionModel):
@@ -299,6 +279,16 @@ class ClipCaptionPrefix(ClipCaptionModel):
         self.gpt.eval()
         return self
 
+
+
+class ClipCaptionPrefix(ClipCaptionModel):
+    def parameters(self, recurse: bool = True):
+        return self.clip_project.parameters()
+
+    def train(self, mode: bool = True):
+        super(ClipCaptionPrefix, self).train(mode)
+        self.gpt.eval()
+        return self
 
 
 def generate_beam(
@@ -359,11 +349,9 @@ def generate_beam(
                 generated = generated[next_tokens_source]
                 scores = scores_sum_average * seq_lengths
                 is_stopped = is_stopped[next_tokens_source]
-            # next_token_embed = model.gpt.transformer.wte(next_tokens.squeeze()).view(
-            #     generated.shape[0], 1, -1
-            # ) # GPT-2
-            next_token_embed = model.gpt.model.decoder.embed_tokens(next_tokens.squeeze()).view(
-                generated.shape[0], 1, -1) # OPT
+            next_token_embed = model.gpt.transformer.wte(next_tokens.squeeze()).view(
+                generated.shape[0], 1, -1
+            )
             generated = torch.cat((generated, next_token_embed), dim=1)
             is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze()
             if is_stopped.all():
@@ -428,8 +416,7 @@ def generate2(
                 indices_to_remove = sorted_indices[sorted_indices_to_remove]
                 logits[:, indices_to_remove] = filter_value
                 next_token = torch.argmax(logits, -1).unsqueeze(0)
-                # next_token_embed = model.gpt.transformer.wte(next_token) # GPT-2
-                next_token_embed = model.gpt.model.decoder.embed_tokens(next_token) # OPT
+                next_token_embed = model.gpt.transformer.wte(next_token)
                 if tokens is None:
                     tokens = next_token
                 else:
@@ -444,3 +431,50 @@ def generate2(
 
     return generated_list[0]
 
+#########################################################
+
+import os
+from tqdm import tqdm
+import pandas as pd
+import json
+
+fpath_nice = os.path.join('/data/img_cap/nice', 'NICE_val')
+flist_nice = os.listdir(fpath_nice)
+annot_csv = pd.read_csv(os.path.join('/data/img_cap/nice', 'nice-val-5k.csv'))
+
+# data = {}
+# for img_nice in tqdm(flist_nice):
+#     inputs = {'image':open(os.path.join(fpath_nice, img_nice), 'rb'), 'model':'coco', 'use_beam_search':False}
+#     generated_caption = version.predict(**inputs)
+    
+#     target_caption = annot_csv[annot_csv['public_id']==int(img_nice[:-4])]['caption_gt'].item()
+    
+#     data[int(img_nice[:-4])] = [target_caption, generated_caption]
+    
+# with open('NICE-clipcap_generate.json', 'w') as f_:
+#     json.dump(data, f_)
+
+
+# predict = Predictor()
+# predict.setup()
+
+
+# data_coco_2 = {}
+# data_coco_beam = {}
+# for img_nice in tqdm(flist_nice):
+#     image = os.path.join(fpath_nice, img_nice)
+    
+#     # generated_caption_coco_2, prefix_embed = predict.predict(image=image, model='coco', use_beam_search=False)
+#     generated_caption_coco_beam, prefix_embed = predict.predict(image=image, model='coco', use_beam_search=True)
+    
+#     target_caption = annot_csv[annot_csv['public_id']==int(img_nice[:-4])]['caption_gt'].item()
+    
+#     # data_coco_2[int(img_nice[:-4])] = [target_caption, generated_caption_coco_2]
+#     # torch.save(prefix_embed, f'prefix_embedding/clipcap/{img_nice[:-4]}')
+    
+#     data_coco_beam[int(img_nice[:-4])] = [target_caption, generated_caption_coco_beam]
+
+# # with open('nice-clipcap_coco_2.json', 'w') as fp:
+#     # json.dump(data_coco_2, fp)
+# with open('nice-clipcap_coco_beam.json', 'w') as fp:
+#     json.dump(data_coco_beam, fp)
