@@ -17,6 +17,14 @@ Image captioning is a complicated task, where usually a pretrained detection net
 
 In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was already trained over an extremely large number of images, thus is capable of generating semantic encodings for arbitrary images without additional supervision. To produce meaningful sentences we fine-tune a pretrained language model, which has been proven to be successful for other natural language tasks. The key idea is to use the CLIP encoding as a prefix to the textual captions by employing a simple mapping network over the raw encoding, and then fine-tune our language model to generate a valid caption. In addition, we present another variant, where we utilize a transformer architecture for the mapping network and avoid the fine-tuning of GPT-2. Still, our light model achieve comaparable to state-of-the-art over nocaps dataset.
 
+
+
+
+## Swith your language model from GPT-2 to OPT
+We enabled to train your ClipCap model with OPT. We are looking forward to make this code work well with [BLIP model](https://github.com/salesforce/BLIP.git). 
+Training code is available at train.py and inference code will be updated on predict_OPT.py, which is basically running Predictor function in predict.py. 
+Please note that you manullay have to make sure your desired language model is 'facebook/opt-125m' (variable named as OPT_MODEL) on both predict.py and train.py.
+
 ## COCO Examples
 
 <table>
@@ -46,33 +54,7 @@ In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was 
  </table>
 
 
-## Conceptual Captions Examples
 
-<table>
-  <tr>
-    <td><img src="Images/CONCEPTUAL_01.jpg" ></td>
-    <td><img src="Images/CONCEPTUAL_02.jpg" ></td>
-    <td><img src="Images/CONCEPTUAL_03.jpg" ></td>
-  </tr>
-  <tr>
-    <td>3D render of a man holding a globe.</td>
-     <td>Students enjoing the cherry blossoms</td>
-     <td>Green leaf of lettuce on a white plate.</td>
-  </tr>
- </table>
- 
- <table>
-  <tr>
-    <td><img src="Images/CONCEPTUAL_04.jpg" ></td>
-    <td><img src="Images/CONCEPTUAL_05.jpg" ></td>
-    <td><img src="Images/CONCEPTUAL_06.jpg" ></td>
-  </tr>
-  <tr>
-    <td>The hotel and casino on the waterfront. </td>
-     <td>The triangle is a symbol of the soul.</td>
-     <td>Cartoon boy in the bath.</td>
-  </tr>
- </table>
 
 
 ## Inference Notebooks
@@ -123,7 +105,7 @@ python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl 
 ```
 
 **If you wish to use ResNet-based CLIP:** 
-
+https://github.com/Jhryu30/cvpr2023_challenge_clipcap.git
 ```
 python parse_coco.py --clip_model_type RN50x4
 ```
@@ -131,21 +113,7 @@ python parse_coco.py --clip_model_type RN50x4
 python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
 ```
 
-## Conceptual training
 
-Download the .TSV train/val files from [Conceptual Captions](https://ai.google.com/research/ConceptualCaptions/download) and place them under <data_root> directory.
-
-Download the images and extract CLIP features using (outputs are `<data_root>/conceptual_clip_ViT-B_32_train.pkl` and  `<data_root>/conceptual_clip_ViT-B_32_val.pkl`):
-```
-python parse_conceptual.py --clip_model_type ViT-B/32 --data_root <data_root> --num_threads 16
-```
-Notice, downloading the images might take a few days.
-
-Train with fine-tuning of GPT2:
-```
-python train.py --data <data_root>/conceptual_clip_ViT-B_32_train.pkl --out_dir ./conceptual_train/
-```
-Similarly to the COCO training, you can train a transformer mapping network, and / or parse the images using a ResNet-based CLIP. 
 
 ## Citation
 If you use this code for your research, please cite:

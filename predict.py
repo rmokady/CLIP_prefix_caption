@@ -12,7 +12,6 @@ from typing import Tuple, List, Union, Optional
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, get_linear_schedule_with_warmup
 from transformers import AutoTokenizer # OPTForCausalLM
 from modeling_opt_pp import OPTForCausalLM
-from configuration_opt_pp import OPTConfig
 import skimage.io as io
 import PIL.Image
 
@@ -50,8 +49,8 @@ def direct_weiht_paths(language_model):
         return WEIGHTS_PATHS
     elif language_model == 'opt':
         WEIGHTS_PATHS = {
-        "coco": "/data/daisy/clipcap_output/opt_32quries/coco_prefix-018.pt",
-        "coco_gpt008": "/data/daisy/clipcap_output/opt_32quries/coco_prefix-009.pt",
+        "coco": "/data/daisy/clipcap_output/opt13b_32query/coco_prefix-018.pt",
+        "coco_gpt008": "/data/daisy/clipcap_output/opt13b_32query/coco_prefix-008.pt",
         }
         print('your language model is : OPT')
         return WEIGHTS_PATHS
@@ -61,7 +60,7 @@ WEIGHTS_PATHS = direct_weiht_paths('opt')
 
 D = torch.device
 CPU = torch.device("cpu")
-OPT_MODEL = 'facebook/opt-125m'
+OPT_MODEL = 'facebook/opt-1.3b'
 
 class Predictor(cog.Predictor):
     def setup(self, language_model='opt', prefix_length=32, device1=torch.device("cuda:2"), device2=torch.device("cuda:3")):
@@ -116,9 +115,9 @@ class Predictor(cog.Predictor):
             prefix_embed = model.clip_project(prefix).reshape(1, self.prefix_length, -1)
             
         if use_beam_search:
-            return generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
+            return prefix_embed, generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
         else:
-            return generate2(model, self.tokenizer, embed=prefix_embed)
+            return prefix_embed, generate2(model, self.tokenizer, embed=prefix_embed)
 
 
 class MlpTransformer(nn.Module):
@@ -256,14 +255,14 @@ class ClipCaptionModel(nn.Module):
         if self.language_model == 'gpt2':
             embedding_text = self.gpt.transformer.wte(tokens)
         elif self.language_model == 'opt':
-            embedding_text = self.gpt.model.embed_tokens(tokens)
+            embedding_text = self.gpt.model.decoder.embed_tokens(tokens)
         prefix_projections = self.clip_project(prefix).view(-1, self.prefix_length, self.gpt_embedding_size)
         embedding_cat = torch.cat((prefix_projections, embedding_text.to(self.device1)), dim=1)
         if labels is not None:
             dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
             labels = torch.cat((dummy_token, tokens), dim=1)
         out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
-        return out.to(self.device1)
+        return out
 
     def __init__(self, prefix_length: int, language_model='gpt2', clip_length: Optional[int] = 32, prefix_size: int = 512,
                  num_layers: int = 8, device1=torch.device("cuda:2"), device2=torch.device("cuda:3")):
@@ -283,7 +282,7 @@ class ClipCaptionModel(nn.Module):
             print('clipcaption - LM : OPT')
             self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL)
             self.gpt_embedding_size = self.gpt.model.decoder.embed_tokens.weight.shape[1]
-            self.gpt.setting_device(device1 = self.device1, device2 = self.device2)
+            self.gpt.model.decoder.setting_device(device1 = self.device1, device2 = self.device2, pn=6)
 
         self.clip_project = TransformerMapper(dim_clip=self.prefix_size, dim_embedding=self.gpt_embedding_size, 
                                               prefix_length=self.prefix_length, clip_length=self.clip_length, num_layers=self.num_layers).to(self.device1)
@@ -305,18 +304,19 @@ def generate_beam(
     model,
     tokenizer,
     beam_size: int = 5,
-    prompt=None,
+    prompt="a photo of",
     embed=None,
     entry_length=67,
     temperature=1.0,
-    stop_token: str = ".",
+    stop_token: str = "/n",
 ):
 
     model.eval()
     stop_token_index = tokenizer.encode(stop_token)[0]
     tokens = None
     scores = None
-    device = next(model.parameters()).device
+    device = embed.device
+    embed = embed.type(torch.DoubleTensor)
     seq_lengths = torch.ones(beam_size, device=device)
     is_stopped = torch.zeros(beam_size, device=device, dtype=torch.bool)
     with torch.no_grad():
@@ -326,7 +326,8 @@ def generate_beam(
             if tokens is None:
                 tokens = torch.tensor(tokenizer.encode(prompt))
                 tokens = tokens.unsqueeze(0).to(device)
-                generated = model.gpt.transformer.wte(tokens)
+                # generated = model.gpt.transformer.wte(tokens) # GPT-2
+                generated = model.gpt.decoder.embed_tokens(tokens) # OPT
         for i in range(entry_length):
             outputs = model.gpt(inputs_embeds=generated)
             logits = outputs.logits
@@ -383,20 +384,21 @@ def generate2(
     model,
     tokenizer,
     tokens=None,
-    prompt=None,
+    prompt="a photo of",
     embed=None,
     entry_count=1,
     entry_length=67,  # maximum number of words
     top_p=0.8,
     temperature=1.0,
-    stop_token: str = ".",
+    stop_token: str = "",
 ):
     model.eval()
     generated_num = 0
     generated_list = []
     stop_token_index = tokenizer.encode(stop_token)[0]
     filter_value = -float("Inf")
-    device = next(model.parameters()).device
+    device = embed.device
+    embed = embed.type(torch.DoubleTensor)
 
     with torch.no_grad():
 
@@ -429,7 +431,7 @@ def generate2(
                 logits[:, indices_to_remove] = filter_value
                 next_token = torch.argmax(logits, -1).unsqueeze(0)
                 # next_token_embed = model.gpt.transformer.wte(next_token) # GPT-2
-                next_token_embed = model.gpt.model.decoder.embed_tokens(next_token) # OPT
+                next_token_embed = model.gpt.model.decoder.embed_tokens(next_token).to(device) # OPT
                 if tokens is None:
                     tokens = next_token
                 else:
