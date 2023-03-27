@@ -20,6 +20,8 @@ In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was 
 
 
 
+
+
 ## Swith your language model from GPT-2 to OPT
 We enabled to train your ClipCap model with OPT. We are looking forward to make this code work well with [BLIP model](https://github.com/salesforce/BLIP.git). 
 Training code is available at train.py and inference code will be updated on predict_OPT.py, which is basically running Predictor function in predict.py. 
