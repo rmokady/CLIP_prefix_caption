@@ -9,7 +9,6 @@ Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC
 
 ## Official implementation for the paper ["ClipCap: CLIP Prefix for Image Captioning"](https://arxiv.org/abs/2111.09734)
 
-456
 
 
 
