@@ -7,15 +7,18 @@ Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC
 
 
 
-## Official implementation for the paper ["ClipCap: CLIP Prefix for Image Captioning"](https://arxiv.org/abs/2111.09734)
+## implementation for the paper ["ClipCap: CLIP Prefix for Image Captioning"](https://arxiv.org/abs/2111.09734)
 
 
 
 
 ## Description  
-Image captioning is a complicated task, where usually a pretrained detection network is used, requires additional supervision in the form of object annotation. We present a new approach that does not requires additional information (i.e. requires only images and captions), thus can be applied to any data. In addition, our model's training time is much faster than similar methods while achieving comparable to state-of-the-art results, even for the Conceptual Captions dataset contains over 3M images. 
+- [ClipCap: CLIP Prefix for Image Captioning](https://arxiv.org/abs/2111.09734)
+- [original ClipCap github](https://github.com/rmokady/CLIP_prefix_caption.git) : CLIP_prefix_caption
 
-In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was already trained over an extremely large number of images, thus is capable of generating semantic encodings for arbitrary images without additional supervision. To produce meaningful sentences we fine-tune a pretrained language model, which has been proven to be successful for other natural language tasks. The key idea is to use the CLIP encoding as a prefix to the textual captions by employing a simple mapping network over the raw encoding, and then fine-tune our language model to generate a valid caption. In addition, we present another variant, where we utilize a transformer architecture for the mapping network and avoid the fine-tuning of GPT-2. Still, our light model achieve comaparable to state-of-the-art over nocaps dataset.
+code references
+- [transformers(OPT) github](https://github.com/huggingface/transformers/blob/main/src/transformers/models/opt/modeling_opt.py)
+- [BLIP2](https://github.com/salesforce/BLIP.git)
 
 
 
@@ -27,7 +30,15 @@ We enabled to train your ClipCap model with OPT. We are looking forward to make 
 Training code is available at `train.py` and inference code will be updated on `predict_OPT.py`, which is basically running Predictor function in predict.py. 
 Please note that you manullay have to make sure your desired language model is 'facebook/opt-125m' (variable named as OPT_MODEL) on both `predict.py` and `train.py`.
 
+```
+python train_OPT.py --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir /data/daisy/clipcap_output/coco_train/ --only_prefix --device
+```
+```
+python predict_nice.py
+```
 
+### model parallelization
+- OPT-1.3b : 2-GPU, 16GB (per GPU), 1h13m per epoch
 
 
 ## Inference Notebooks
@@ -87,6 +98,7 @@ python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --
 ```
 
 
+*latest update : 2023-03-28*
 
 ## Citation
 If you use this code for your research, please cite:

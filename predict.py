@@ -327,7 +327,7 @@ def generate_beam(
                 tokens = torch.tensor(tokenizer.encode(prompt))
                 tokens = tokens.unsqueeze(0).to(device)
                 # generated = model.gpt.transformer.wte(tokens) # GPT-2
-                generated = model.gpt.decoder.embed_tokens(tokens) # OPT
+                generated = model.gpt.decoder.embed_tokens(tokens)
         for i in range(entry_length):
             outputs = model.gpt(inputs_embeds=generated)
             logits = outputs.logits
