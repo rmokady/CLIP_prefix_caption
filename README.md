@@ -21,6 +21,45 @@ code references
 - [BLIP2](https://github.com/salesforce/BLIP.git)
 
 
+## Training prerequisites
+
+[comment]: <> (Dependencies can be found at the [Inference notebook]&#40;https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing&#41; )
+Clone, create environment and install dependencies:  
+```
+git clone https://github.com/rmokady/CLIP_prefix_caption && cd CLIP_prefix_caption
+conda env create -f environment.yml
+conda activate clip_prefix_caption
+```
+
+## COCO training
+
+Download [train_captions](https://drive.google.com/file/d/1D3EzUK1d1lNhD2hAvRiKPThidiVbP2K_/view?usp=sharing) to `data/coco/annotations`.
+
+Download [training images](http://images.cocodataset.org/zips/train2014.zip) and [validation images](http://images.cocodataset.org/zips/val2014.zip) and unzip (We use Karpathy et el. split).
+
+Extract CLIP features using (output is `data/coco/oscar_split_ViT-B_32_train.pkl`):
+```
+python parse_coco.py --clip_model_type ViT-B/32
+```
+Train with fine-tuning of GPT2:
+```
+python train.py --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/
+```
+
+__In case you want to train model with OPT, please look directly "Swith your language model from GPT-2 to OPT"__  
+Train only transformer mapping network:
+```
+python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40
+```
+
+**If you wish to use ResNet-based CLIP:** 
+https://github.com/Jhryu30/cvpr2023_challenge_clipcap.git
+```
+python parse_coco.py --clip_model_type RN50x4
+```
+```
+python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
+```
 
 
 
@@ -58,44 +97,6 @@ Both [COCO](https://drive.google.com/file/d/1IdaBtMSvtyzF0ByVaBHtvM0JYSXRExRX/vi
 2. Integrated to [Huggingface Spaces](https://huggingface.co/spaces) with [Gradio](https://github.com/gradio-app/gradio). See demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/CLIP_prefix_captioning) (currently not supporting beam search)
 
 
-## Training prerequisites
-
-[comment]: <> (Dependencies can be found at the [Inference notebook]&#40;https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing&#41; )
-Clone, create environment and install dependencies:  
-```
-git clone https://github.com/rmokady/CLIP_prefix_caption && cd CLIP_prefix_caption
-conda env create -f environment.yml
-conda activate clip_prefix_caption
-```
-
-## COCO training
-
-Download [train_captions](https://drive.google.com/file/d/1D3EzUK1d1lNhD2hAvRiKPThidiVbP2K_/view?usp=sharing) to `data/coco/annotations`.
-
-Download [training images](http://images.cocodataset.org/zips/train2014.zip) and [validation images](http://images.cocodataset.org/zips/val2014.zip) and unzip (We use Karpathy et el. split).
-
-Extract CLIP features using (output is `data/coco/oscar_split_ViT-B_32_train.pkl`):
-```
-python parse_coco.py --clip_model_type ViT-B/32
-```
-Train with fine-tuning of GPT2:
-```
-python train.py --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/
-```
-
-Train only transformer mapping network:
-```
-python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40
-```
-
-**If you wish to use ResNet-based CLIP:** 
-https://github.com/Jhryu30/cvpr2023_challenge_clipcap.git
-```
-python parse_coco.py --clip_model_type RN50x4
-```
-```
-python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
-```
 
 
 *latest update : 2023-03-28*
