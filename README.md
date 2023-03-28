@@ -24,37 +24,8 @@ In our work, we use the [CLIP](https://github.com/openai/CLIP) model, which was 
 
 ## Swith your language model from GPT-2 to OPT
 We enabled to train your ClipCap model with OPT. We are looking forward to make this code work well with [BLIP model](https://github.com/salesforce/BLIP.git). 
-Training code is available at train.py and inference code will be updated on predict_OPT.py, which is basically running Predictor function in predict.py. 
-Please note that you manullay have to make sure your desired language model is 'facebook/opt-125m' (variable named as OPT_MODEL) on both predict.py and train.py.
-
-## COCO Examples
-
-<table>
-  <tr>
-    <td><img src="Images/COCO_val2014_000000562207.jpg" ></td>
-    <td><img src="Images/COCO_val2014_000000165547.jpg" ></td>
-    <td><img src="Images/COCO_val2014_000000579664.jpg" ></td>
-  </tr>
-  <tr>
-    <td>A couple of people standing next to an elephant. </td>
-     <td>A wooden table sitting in front of a window.</td>
-     <td>A bunch of bananas sitting on top of a table.</td>
-  </tr>
- </table>
- 
- <table>
-  <tr>
-    <td><img src="Images/COCO_val2014_000000060623.jpg" ></td>
-    <td><img src="Images/COCO_val2014_000000386164.jpg" ></td>
-    <td><img src="Images/COCO_val2014_000000354533.jpg" ></td>
-  </tr>
-  <tr>
-    <td>A woman holding a plate with a piece of cake in front of her face. </td>
-     <td>A wooden table topped with lots of wooden utensils.</td>
-     <td>A red motorcycle parked on top of a dirt field.</td>
-  </tr>
- </table>
-
+Training code is available at `train.py` and inference code will be updated on `predict_OPT.py`, which is basically running Predictor function in predict.py. 
+Please note that you manullay have to make sure your desired language model is 'facebook/opt-125m' (variable named as OPT_MODEL) on both `predict.py` and `train.py`.
 
 
 
