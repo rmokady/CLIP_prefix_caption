@@ -63,27 +63,26 @@ CPU = torch.device("cpu")
 OPT_MODEL = 'facebook/opt-1.3b'
 
 class Predictor(cog.Predictor):
-    def setup(self, language_model='opt', prefix_length=32, device1=torch.device("cuda:2"), device2=torch.device("cuda:3")):
+    def setup(self, args):
         """Load the model into memory to make running multiple predictions efficient"""
         # self.device = torch.device("cuda")
-        self.device1 = device1
-        self.device2 = device2
+        self.device1 = make_device(args)[0]
         self.clip_model, self.preprocess = clip.load(
             "ViT-B/32", device=self.device1, jit=False
         )
+        self.args = args
         
-        self.language_model = language_model
-        if self.language_model == 'gpt2':
+        if self.args.language_model == 'gpt2':
             self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        elif self.language_model == 'opt':
+        elif self.args.language_model == 'opt':
             self.tokenizer = AutoTokenizer.from_pretrained(OPT_MODEL)
 
         self.models = {}
-        self.prefix_length = prefix_length
+        self.prefix_length = args.prefix_length
         for key, weights_path in WEIGHTS_PATHS.items():
             
-            model = ClipCaptionModel(self.prefix_length, language_model=self.language_model, device1=self.device1, device2=self.device2)
-            model.load_state_dict(torch.load(weights_path)) #, map_location=CPU))
+            model = ClipCaptionModel(args)
+            model.load_state_dict(torch.load(weights_path, map_location=CPU))
             model = model.eval()
             # model = model.to(self.device)
             self.models[key] = model
@@ -113,7 +112,6 @@ class Predictor(cog.Predictor):
                 self.device1, dtype=torch.float32
             )
             prefix_embed = model.clip_project(prefix).reshape(1, self.prefix_length, -1)
-            
         if use_beam_search:
             return prefix_embed, generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
         else:
@@ -248,15 +246,15 @@ class TransformerMapper(nn.Module):
 class ClipCaptionModel(nn.Module):
 
     def get_dummy_token(self, batch_size: int, device: torch.device) -> torch.Tensor:
-        return torch.zeros(batch_size, self.prefix_length, dtype=torch.int64, device=device)
+        return torch.zeros(batch_size, self.args.prefix_length, dtype=torch.int64, device=device)
 
     def forward(self, tokens: torch.Tensor, prefix: torch.Tensor, mask: Optional[torch.Tensor] = None,
                 labels: Optional[torch.Tensor] = None):
-        if self.language_model == 'gpt2':
+        if self.args.language_model == 'gpt2':
             embedding_text = self.gpt.transformer.wte(tokens)
-        elif self.language_model == 'opt':
+        elif self.args.language_model == 'opt':
             embedding_text = self.gpt.model.decoder.embed_tokens(tokens)
-        prefix_projections = self.clip_project(prefix).view(-1, self.prefix_length, self.gpt_embedding_size)
+        prefix_projections = self.clip_project(prefix).view(-1, self.args.prefix_length, self.gpt_embedding_size)
         embedding_cat = torch.cat((prefix_projections, embedding_text.to(self.device1)), dim=1)
         if labels is not None:
             dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
@@ -264,28 +262,26 @@ class ClipCaptionModel(nn.Module):
         out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
         return out
 
-    def __init__(self, prefix_length: int, language_model='gpt2', clip_length: Optional[int] = 32, prefix_size: int = 512,
-                 num_layers: int = 8, device1=torch.device("cuda:2"), device2=torch.device("cuda:3")):
+    def __init__(self, args, clip_length: Optional[int] = 32, prefix_size: int = 512, num_layers: int = 8):
         super(ClipCaptionModel, self).__init__()
-        self.prefix_length = prefix_length
-        self.language_model = language_model
-        self.prefix_size=prefix_size
+        self.args = args
+        self.prefix_size = prefix_size
         self.clip_length = clip_length
         self.num_layers = num_layers
-        self.device1 = device1
-        self.device2 = device2
+        self.device1, device2, device3 = make_device(args)
+        pn1, pn2 = int(args.pn[0]), int(args.pn[1])
         
-        if self.language_model == 'gpt2':
+        if self.args.language_model == 'gpt2':
             self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
             self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
-        elif self.language_model == 'opt':
+        elif self.args.language_model == 'opt':
             print('clipcaption - LM : OPT')
             self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL)
             self.gpt_embedding_size = self.gpt.model.decoder.embed_tokens.weight.shape[1]
-            self.gpt.model.decoder.setting_device(device1 = self.device1, device2 = self.device2, pn=6)
-
+            self.gpt.model.decoder.setting_device(device1=self.device1, device2=device2, device3=device3, pn1=pn1, pn2=pn2)
+            
         self.clip_project = TransformerMapper(dim_clip=self.prefix_size, dim_embedding=self.gpt_embedding_size, 
-                                              prefix_length=self.prefix_length, clip_length=self.clip_length, num_layers=self.num_layers).to(self.device1)
+                                              prefix_length=self.args.prefix_length, clip_length=self.clip_length, num_layers=self.num_layers).to(self.device1)
 
 
 class ClipCaptionPrefix(ClipCaptionModel):
@@ -298,6 +294,24 @@ class ClipCaptionPrefix(ClipCaptionModel):
         self.gpt.eval()
         return self
 
+def make_device(args):
+    device_num = len(args.device)
+    devices = []
+    for i in range(device_num):
+        device = "cuda:" + args.device[i]
+        devices.append(torch.device(device))
+    
+    assert len(devices) < 4
+    if len(devices) == 1:
+        devices *= 3
+        device1, device2, device3 = devices
+    elif len(devices) == 2:
+        device1 = devices[0]
+        device2 = devices[1]
+        device3 = devices[1]
+    else:
+        device1, device2, device3 = devices
+    return device1, device2, device3
 
 
 def generate_beam(

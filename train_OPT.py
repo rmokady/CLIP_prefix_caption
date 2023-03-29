@@ -66,20 +66,20 @@ class ClipCocoDataset(Dataset):
         captions_raw = all_data["captions"]
         self.image_ids = [caption["image_id"] for caption in captions_raw] 
         self.captions = [caption['caption'] for caption in captions_raw]
-        if os.path.isfile(f"{data_path[:-4]}_tokens.pkl"):
-            with open(f"{data_path[:-4]}_tokens.pkl", 'rb') as f:
-                self.captions_tokens, self.caption2embedding, self.max_seq_len = pickle.load(f)
-        else:
-            self.captions_tokens = []
-            self.caption2embedding = []
-            max_seq_len = 0
-            for caption in captions_raw:
-                self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['caption']), dtype=torch.int64))
-                self.caption2embedding.append(caption["clip_embedding"])
-                max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
-            # self.max_seq_len = max_seq_len
-            with open(f"{data_path[:-4]}_tokens.pkl", 'wb') as f:
-                pickle.dump([self.captions_tokens, self.caption2embedding, max_seq_len], f)
+        # if os.path.isfile(f"{data_path[:-4]}_tokens.pkl"):
+        #     with open(f"{data_path[:-4]}_tokens.pkl", 'rb') as f:
+        #         self.captions_tokens, self.caption2embedding, self.max_seq_len = pickle.load(f)
+        # else:
+        self.captions_tokens = []
+        self.caption2embedding = []
+        max_seq_len = 0
+        for caption in captions_raw:
+            self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['caption']), dtype=torch.int64))
+            self.caption2embedding.append(caption["clip_embedding"])
+            max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
+        # self.max_seq_len = max_seq_len
+        with open(f"{data_path[:-4]}_OPT_tokens.pkl", 'wb') as f:
+            pickle.dump([self.captions_tokens, self.caption2embedding, max_seq_len], f)
         all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
         self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
 
@@ -243,13 +243,14 @@ class ClipCaptionModel(nn.Module):
         out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
         return out
 
-    def __init__(self, args, prefix_size: int = 512):
+    def __init__(self, args, clip_length: Optional[int] = 32, prefix_size: int = 512, num_layers: int = 8):
         super(ClipCaptionModel, self).__init__()
-        devices = make_device(args)
-        
-        self.device1 = devices[0]
-        self.device2 = devices[1]
         self.args = args
+        self.prefix_size = prefix_size
+        self.clip_length = clip_length
+        self.num_layers = num_layers
+        self.device1, device2, device3 = make_device(args)
+        pn1, pn2 = int(args.pn[0]), int(args.pn[1])
         
         if self.args.language_model == 'gpt2':
             self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
@@ -258,14 +259,10 @@ class ClipCaptionModel(nn.Module):
             print('clipcaption - LM : OPT')
             self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL)
             self.gpt_embedding_size = self.gpt.model.decoder.embed_tokens.weight.shape[1]
-            self.gpt.model.decoder.setting_device(device1 = self.device1, device2 = self.device2, pn = args.parallel_num)
-
-        if args.mapping_type == MappingType.MLP:
-            self.clip_project = MLP((prefix_size, (self.gpt_embedding_size * self.args.prefix_length) // 2,
-                                     self.gpt_embedding_size * self.args.prefix_length))
-        else:
-            self.clip_project = TransformerMapper(prefix_size, self.gpt_embedding_size, self.args.prefix_length,
-                                                                     self.args.prefix_length_clip, self.args.num_layers).to(self.device1)
+            self.gpt.model.decoder.setting_device(device1=self.device1, device2=device2, device3=device3, pn1=pn1, pn2=pn2)
+            
+        self.clip_project = TransformerMapper(dim_clip=self.prefix_size, dim_embedding=self.gpt_embedding_size, 
+                                              prefix_length=self.args.prefix_length, clip_length=self.clip_length, num_layers=self.num_layers).to(self.device1)
 
 
 class ClipCaptionPrefix(ClipCaptionModel):
@@ -341,6 +338,7 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
             tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, dataset.prefix_length - 1: -1].to(device)
+            breakpoint()
             loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
             loss.backward()
             optimizer.step()
@@ -363,10 +361,30 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
             )
     return model
 
+def make_device(args):
+    device_num = len(args.device)
+    devices = []
+    for i in range(device_num):
+        device = "cuda:" + args.device[i]
+        devices.append(torch.device(device))
+    
+    assert len(devices) < 4
+    if len(devices) == 1:
+        devices *= 3
+        device1, device2, device3 = devices
+    elif len(devices) == 2:
+        device1 = devices[0]
+        device2 = devices[1]
+        device3 = devices[1]
+    else:
+        device1, device2, device3 = devices
+    return device1, device2, device3
+
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data', default='./data/coco/oscar_split_train.pkl')
+    parser.add_argument('--data', default='./data/coco/oscar_split_ViT-B_32_train.pkl')
     parser.add_argument('--out_dir', default='./checkpoints')
     parser.add_argument('--prefix', default='coco_prefix', help='prefix for saved filenames')
     parser.add_argument('--epochs', type=int, default=10)
@@ -379,9 +397,9 @@ def main():
     parser.add_argument('--num_layers', type=int, default=8)
     parser.add_argument('--is_rn', dest='is_rn', action='store_true')
     parser.add_argument('--normalize_prefix', dest='normalize_prefix', action='store_true')
-    parser.add_argument('--device', default='23')
+    parser.add_argument('--device', default='12')
     parser.add_argument('--language_model', type=str, default='opt', help='gpt2/opt')
-    parser.add_argument('--parallel_num', type=int, default=6, help='0<n<12, splitting OPT layer for pipeline parallelization')
+    parser.add_argument('--pn', default='47', help='splitting OPT layer for pipeline parallelization')
     args = parser.parse_args()
 
     prefix_length = args.prefix_length
