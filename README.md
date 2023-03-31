@@ -29,6 +29,8 @@ Clone, create environment and install dependencies:
 git clone https://github.com/rmokady/CLIP_prefix_caption && cd CLIP_prefix_caption
 conda env create -f environment.yml
 conda activate clip_prefix_caption
+pip install -e "git+https://github.com/replicate/cog.git@v0.0.20#egg=cog&subdirectory=python/"
+pip install transformers --upgrade
 ```
 
 ## COCO training
