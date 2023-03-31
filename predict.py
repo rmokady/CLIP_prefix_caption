@@ -33,29 +33,23 @@ TNS = Union[Tuple[TN, ...], List[TN]]
 TSN = Optional[TS]
 TA = Union[T, ARRAY]
 
-# WEIGHTS_PATHS = {
-#     "coco_gpt": "coco_train/gpt-finetuned/coco_prefix-009.pt",
-#     "coco_gpt008": "coco_train/gpt-finetuned/coco_prefix-008.pt",
-#     # "conceptual-captions": "conceptual_weights.pt",
-# }
-
-def direct_weiht_paths(language_model):
+def direct_weight_paths(language_model):
     if language_model == 'gpt2':
         WEIGHTS_PATHS = {
-            "coco": "/data/daisy/clipcap_output/gpt2_32quries/coco_prefix-009.pt",
-            "coco_gpt008": "/data/daisy/clipcap_output/gpt-finetuned/coco_prefix-008.pt",
+            "coco": "/data/IC/clipcap/coco_prefix-000.pt",
+            "coco_gpt008": "/data/IC/clipcap/coco_prefix-000.pt",
         }
         print('your language model is : GPT-2')
         return WEIGHTS_PATHS
     elif language_model == 'opt':
         WEIGHTS_PATHS = {
-        "coco": "/data/daisy/clipcap_output/opt13b_32query/coco_prefix-018.pt",
-        "coco_gpt008": "/data/daisy/clipcap_output/opt13b_32query/coco_prefix-008.pt",
+        "opt_000": "/data/IC/clipcap/model_coco_prefix-000.pt",
+        "opt_001": "/data/IC/clipcap/model_coco_prefix-001.pt",
         }
         print('your language model is : OPT')
         return WEIGHTS_PATHS
 
-WEIGHTS_PATHS = direct_weiht_paths('opt')
+WEIGHTS_PATHS = direct_weight_paths('opt')
 
 
 D = torch.device
@@ -112,10 +106,8 @@ class Predictor(cog.Predictor):
                 self.device1, dtype=torch.float32
             )
             prefix_embed = model.clip_project(prefix).reshape(1, self.prefix_length, -1)
-        if use_beam_search:
-            return prefix_embed, generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
-        else:
-            return prefix_embed, generate2(model, self.tokenizer, embed=prefix_embed)
+            
+        return generate(model, self.tokenizer, prefix_embed, self.device1)
 
 
 class MlpTransformer(nn.Module):
@@ -314,149 +306,44 @@ def make_device(args):
     return device1, device2, device3
 
 
-def generate_beam(
-    model,
-    tokenizer,
-    beam_size: int = 5,
-    prompt="a photo of",
-    embed=None,
-    entry_length=67,
-    temperature=1.0,
-    stop_token: str = "/n",
-):
-
-    model.eval()
-    stop_token_index = tokenizer.encode(stop_token)[0]
-    tokens = None
-    scores = None
-    device = embed.device
-    embed = embed.type(torch.DoubleTensor)
-    seq_lengths = torch.ones(beam_size, device=device)
-    is_stopped = torch.zeros(beam_size, device=device, dtype=torch.bool)
-    with torch.no_grad():
-        if embed is not None:
-            generated = embed
-        else:
-            if tokens is None:
-                tokens = torch.tensor(tokenizer.encode(prompt))
-                tokens = tokens.unsqueeze(0).to(device)
-                # generated = model.gpt.transformer.wte(tokens) # GPT-2
-                generated = model.gpt.decoder.embed_tokens(tokens)
-        for i in range(entry_length):
-            outputs = model.gpt(inputs_embeds=generated)
-            logits = outputs.logits
-            logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
-            logits = logits.softmax(-1).log()
-            if scores is None:
-                scores, next_tokens = logits.topk(beam_size, -1)
-                generated = generated.expand(beam_size, *generated.shape[1:])
-                next_tokens, scores = next_tokens.permute(1, 0), scores.squeeze(0)
-                if tokens is None:
-                    tokens = next_tokens
-                else:
-                    tokens = tokens.expand(beam_size, *tokens.shape[1:])
-                    tokens = torch.cat((tokens, next_tokens), dim=1)
-            else:
-                logits[is_stopped] = -float(np.inf)
-                logits[is_stopped, 0] = 0
-                scores_sum = scores[:, None] + logits
-                seq_lengths[~is_stopped] += 1
-                scores_sum_average = scores_sum / seq_lengths[:, None]
-                scores_sum_average, next_tokens = scores_sum_average.view(-1).topk(
-                    beam_size, -1
+def generate(model, tokenizer, prefix_embed, device1,
+             use_nucleus_sampling=False,
+             num_beams=5,
+             max_length=30,
+             min_length=1,
+             top_p=0.9,
+             repetition_penalty=1.5,
+             length_penalty=1.0,
+             num_captions=1,
+             temperature=1,
+             prompt=""):
+    
+    atts_opt = torch.ones(prefix_embed.size()[:-1], dtype=torch.long).to(device1)
+    opt_tokens = tokenizer([prompt], return_tensors='pt').to(device1)
+    input_ids = opt_tokens.input_ids
+    query_embeds = prefix_embed
+    attention_mask = torch.cat([atts_opt, opt_tokens.attention_mask], dim=1)
+    
+    outputs = model.gpt.generate(
+                    input_ids=input_ids,
+                    query_embeds=query_embeds,
+                    attention_mask=attention_mask,
+                    do_sample=use_nucleus_sampling,
+                    top_p=top_p,
+                    temperature=temperature,
+                    num_beams=num_beams,
+                    max_new_tokens=max_length,
+                    min_length=min_length,
+                    eos_token_id=tokenizer('\n', add_special_tokens=False).input_ids[0],
+                    repetition_penalty=repetition_penalty,
+                    length_penalty=length_penalty,
+                    num_return_sequences=num_captions,
                 )
-                next_tokens_source = next_tokens // scores_sum.shape[1]
-                seq_lengths = seq_lengths[next_tokens_source]
-                next_tokens = next_tokens % scores_sum.shape[1]
-                next_tokens = next_tokens.unsqueeze(1)
-                tokens = tokens[next_tokens_source]
-                tokens = torch.cat((tokens, next_tokens), dim=1)
-                generated = generated[next_tokens_source]
-                scores = scores_sum_average * seq_lengths
-                is_stopped = is_stopped[next_tokens_source]
-            # next_token_embed = model.gpt.transformer.wte(next_tokens.squeeze()).view(
-            #     generated.shape[0], 1, -1
-            # ) # GPT-2
-            next_token_embed = model.gpt.model.decoder.embed_tokens(next_tokens.squeeze()).view(
-                generated.shape[0], 1, -1) # OPT
-            generated = torch.cat((generated, next_token_embed), dim=1)
-            is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze()
-            if is_stopped.all():
-                break
-    scores = scores / seq_lengths
-    output_list = tokens.cpu().numpy()
-    output_texts = [
-        tokenizer.decode(output[: int(length)])
-        for output, length in zip(output_list, seq_lengths)
-    ]
-    order = scores.argsort(descending=True)
-    output_texts = [output_texts[i] for i in order]
-    return output_texts
-
-
-def generate2(
-    model,
-    tokenizer,
-    tokens=None,
-    prompt="a photo of",
-    embed=None,
-    entry_count=1,
-    entry_length=67,  # maximum number of words
-    top_p=0.8,
-    temperature=1.0,
-    stop_token: str = "",
-):
-    model.eval()
-    generated_num = 0
-    generated_list = []
-    stop_token_index = tokenizer.encode(stop_token)[0]
-    filter_value = -float("Inf")
-    device = embed.device
-    embed = embed.type(torch.DoubleTensor)
-
-    with torch.no_grad():
-
-        for entry_idx in range(entry_count):
-            if embed is not None:
-                generated = embed
-            else:
-                if tokens is None:
-                    tokens = torch.tensor(tokenizer.encode(prompt))
-                    tokens = tokens.unsqueeze(0).to(device)
-
-                generated = model.gpt.transformer.wte(tokens)
-
-            for i in range(entry_length):
-
-                outputs = model.gpt(inputs_embeds=generated)
-                logits = outputs.logits
-                logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
-                sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-                cumulative_probs = torch.cumsum(
-                    nnf.softmax(sorted_logits, dim=-1), dim=-1
-                )
-                sorted_indices_to_remove = cumulative_probs > top_p
-                sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[
-                    ..., :-1
-                ].clone()
-                sorted_indices_to_remove[..., 0] = 0
-
-                indices_to_remove = sorted_indices[sorted_indices_to_remove]
-                logits[:, indices_to_remove] = filter_value
-                next_token = torch.argmax(logits, -1).unsqueeze(0)
-                # next_token_embed = model.gpt.transformer.wte(next_token) # GPT-2
-                next_token_embed = model.gpt.model.decoder.embed_tokens(next_token).to(device) # OPT
-                if tokens is None:
-                    tokens = next_token
-                else:
-                    tokens = torch.cat((tokens, next_token), dim=1)
-                generated = torch.cat((generated, next_token_embed), dim=1)
-                if stop_token_index == next_token.item():
-                    break
-
-            output_list = list(tokens.squeeze().cpu().numpy())
-            output_text = tokenizer.decode(output_list)
-            generated_list.append(output_text)
-
-    return generated_list[0]
-
+    
+    prompt_length = input_ids.shape[1]
+    output_text = tokenizer.batch_decode(
+            outputs[:, prompt_length:], skip_special_tokens=True
+        )
+    output_text = [text.strip() for text in output_text]
+    
+    return output_text[0]
