@@ -60,7 +60,7 @@ WEIGHTS_PATHS = direct_weiht_paths('opt')
 
 D = torch.device
 CPU = torch.device("cpu")
-OPT_MODEL = 'facebook/opt-1.3b'
+OPT_MODEL = 'facebook/opt-2.7b'
 
 class Predictor(cog.Predictor):
     def setup(self, args):
@@ -269,7 +269,7 @@ class ClipCaptionModel(nn.Module):
         self.clip_length = clip_length
         self.num_layers = num_layers
         self.device1, device2, device3 = make_device(args)
-        pn1, pn2 = int(args.pn[0]), int(args.pn[1])
+        pn1, pn2 = int(args.pn[0]), int(args.pn[1:])
         
         if self.args.language_model == 'gpt2':
             self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')

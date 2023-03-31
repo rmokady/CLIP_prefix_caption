@@ -818,11 +818,11 @@ class OPTDecoder(OPTPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         if self.final_layer_norm is not None:
-            self.final_layer_norm.to(self.device2)
+            self.final_layer_norm.to(self.device3)
             hidden_states = self.final_layer_norm(hidden_states)
 
         if self.project_out is not None:
-            self.project_out.to(self.device2)
+            self.project_out.to(self.device3)
             hidden_states = self.project_out(hidden_states)
 
         # add hidden states from the last decoder layer

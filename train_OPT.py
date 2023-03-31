@@ -17,7 +17,7 @@ from typing import Tuple, Optional, Union
 
 import wandb
 
-OPT_MODEL = 'facebook/opt-1.3b'
+OPT_MODEL = 'facebook/opt-2.7b'
 
 class MappingType(Enum):
     MLP = 'mlp'
@@ -250,7 +250,7 @@ class ClipCaptionModel(nn.Module):
         self.clip_length = clip_length
         self.num_layers = num_layers
         self.device1, device2, device3 = make_device(args)
-        pn1, pn2 = int(args.pn[0]), int(args.pn[1])
+        pn1, pn2 = int(args.pn[0]), int(args.pn[1:])
         
         if self.args.language_model == 'gpt2':
             self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
@@ -338,7 +338,6 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
             tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, dataset.prefix_length - 1: -1].to(device)
-            breakpoint()
             loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
             loss.backward()
             optimizer.step()
@@ -357,7 +356,15 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
         if epoch % args.save_every == 0 or epoch == epochs - 1:
             torch.save(
                 model.state_dict(),
-                os.path.join(output_dir, f"{output_prefix}-{epoch:03d}.pt"),
+                os.path.join(output_dir, f"model_{output_prefix}-{epoch:03d}.pt"),
+            )
+            torch.save(
+                scheduler.state_dict(),
+                os.path.join(output_dir, f"schedular_{output_prefix}-{epoch:03d}.pt"),
+            )
+            torch.save(
+                optimizer.state_dict(),
+                os.path.join(output_dir, f"optimizer_{output_prefix}-{epoch:03d}.pt"),
             )
     return model
 
