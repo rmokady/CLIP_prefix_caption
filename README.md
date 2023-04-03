@@ -119,7 +119,7 @@ python train.py --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./co
 
 Train only transformer mapping network:
 ```
-python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40
+python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layers 8 --prefix_length 40 --prefix_length_clip 40
 ```
 
 **If you wish to use ResNet-based CLIP:** 
@@ -128,7 +128,7 @@ python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl 
 python parse_coco.py --clip_model_type RN50x4
 ```
 ```
-python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
+python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layers 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
 ```
 
 ## Conceptual training
