@@ -1,10 +1,5 @@
 # CLIP prefix captioning.
 
-<a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>  
-Inference Notebook: <a href="https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" height=20></a>  
-
-
-
 
 
 ## implementation for the paper ["ClipCap: CLIP Prefix for Image Captioning"](https://arxiv.org/abs/2111.09734)
@@ -84,7 +79,7 @@ python predict_nice.py
 
 
 
-*latest update : 2023-03-28*
+*latest update : 2023-04-04*
 
 ## Citation
 If you use this code for your research, please cite:
