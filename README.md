@@ -48,17 +48,6 @@ Train only transformer mapping network:
 python train.py --only_prefix --data ./data/coco/oscar_split_ViT-B_32_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40
 ```
 
-**If you wish to use ResNet-based CLIP:** 
-https://github.com/Jhryu30/cvpr2023_challenge_clipcap.git
-```
-python parse_coco.py --clip_model_type RN50x4
-```
-```
-python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --out_dir ./coco_train/ --mapping_type transformer  --num_layres 8 --prefix_length 40 --prefix_length_clip 40 --is_rn
-```
-
-
-
 
 ## Swith your language model from GPT-2 to OPT
 We enabled to train your ClipCap model with OPT. We are looking forward to make this code work well with [BLIP model](https://github.com/salesforce/BLIP.git). 
