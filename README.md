@@ -67,7 +67,7 @@ python train.py --only_prefix --data ./data/coco/oscar_split_RN50x4_train.pkl --
 
 ## Swith your language model from GPT-2 to OPT
 We enabled to train your ClipCap model with OPT. We are looking forward to make this code work well with [BLIP model](https://github.com/salesforce/BLIP.git). 
-Training code is available at `train.py` and inference code will be updated on `predict_OPT.py`, which is basically running Predictor function in predict.py. 
+Training code is available at `train_OPT.py` and inference code will be updated on `predict_OPT.py`, which is basically running Predictor function in predict.py. 
 Please note that you manullay have to make sure your desired language model is 'facebook/opt-125m' (variable named as OPT_MODEL) on both `predict.py` and `train.py`.
 
 ```
@@ -79,23 +79,7 @@ python predict_nice.py
 
 ### model parallelization
 - OPT-1.3b : 2-GPU, 16GB (per GPU), 1h13m per epoch
-
-
-## Inference Notebooks
-To help visualize the results we provide a Colab notebook found in `notebooks/clip_prefix_captioning_inference.ipynb`.   
-The notebook will download the pretrained models and run inference on a sample images or 
-on images of your choosing. It is recommended to run this in [Google Colab](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing).
-Inference notebook for the **transformer mapping network (without fine-tune GPT-2)** can be found [here](https://colab.research.google.com/drive/180L3rMFmGujudwO1EJNF-lHIpAsAZ5xq?usp=sharing) for the COCO model (also in `notebooks/transformer_inference.ipynb`).
-
-
-
-Both [COCO](https://drive.google.com/file/d/1IdaBtMSvtyzF0ByVaBHtvM0JYSXRExRX/view?usp=sharing) and [Conceptual Captions](https://drive.google.com/file/d/14pXWwB4Zm82rsDdvbGguLfx9F8aM7ovT/view?usp=sharing) pretrained models are available for mlp mapping network. For the transformer (without fine-tuning GPT-2) we provide [COCO](https://drive.google.com/file/d/1GYPToCqFREwi285wPLhuVExlz7DDUDfJ/view?usp=sharing) pretrained model.
-
-
-
-## Inference GUI
-1. Run it [in the browser](https://replicate.ai/rmokady/clip_prefix_caption) using replicate.ai UI.
-2. Integrated to [Huggingface Spaces](https://huggingface.co/spaces) with [Gradio](https://github.com/gradio-app/gradio). See demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/CLIP_prefix_captioning) (currently not supporting beam search)
+- OPT-2.7b : 3-GPU, 18GB (per GPU), 11h per epoch
 
 
 
