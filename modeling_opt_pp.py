@@ -569,7 +569,7 @@ class OPTDecoder(OPTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def setting_device(self, device1, device2, device3, pn1, pn2):
+    def setting_device(self, device1, device2, device3, pn1=4, pn2=9):
         self.device1 = device1
         self.device2 = device2
         self.device3 = device3
@@ -1083,11 +1083,12 @@ class OPTForCausalLM(OPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            logits = logits[:, -labels.size(1) :, :]
+            #labels.shape : 1 x 56, logits.shape : 1 x 56 x 50272
+            logits = logits[:, -labels.size(1) :, :] # 1 x 56 x 50272
 
             # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+            shift_logits = logits[..., :-1, :].contiguous() # 1 x 55 x 50272
+            shift_labels = labels[..., 1:].contiguous() # 1 x 55
             # Flatten the tokens
             loss_fct = CrossEntropyLoss(reduction=reduction)
             loss = loss_fct(

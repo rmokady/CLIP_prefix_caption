@@ -33,6 +33,8 @@ TNS = Union[Tuple[TN, ...], List[TN]]
 TSN = Optional[TS]
 TA = Union[T, ARRAY]
 
+weights = "/data1/checkpoint/clipcap/model_coco_prefix-009.pt" #.pt"
+
 def direct_weight_paths(language_model):
     if language_model == 'gpt2':
         WEIGHTS_PATHS = {
@@ -43,8 +45,8 @@ def direct_weight_paths(language_model):
         return WEIGHTS_PATHS
     elif language_model == 'opt':
         WEIGHTS_PATHS = {
-        "opt_000": "/data/IC/clipcap/model_coco_prefix-000.pt",
-        "opt_001": "/data/IC/clipcap/model_coco_prefix-001.pt",
+        "opt_000": weights,
+        "opt_001": weights,
         }
         print('your language model is : OPT')
         return WEIGHTS_PATHS
@@ -60,7 +62,7 @@ class Predictor(cog.Predictor):
     def setup(self, args):
         """Load the model into memory to make running multiple predictions efficient"""
         # self.device = torch.device("cuda")
-        self.device1 = make_device(args)[0]
+        self.device1 = make_device_pn(device=args.device, pn=args.pn)[0]
         self.clip_model, self.preprocess = clip.load(
             "ViT-B/32", device=self.device1, jit=False
         )
@@ -69,17 +71,17 @@ class Predictor(cog.Predictor):
         if self.args.language_model == 'gpt2':
             self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         elif self.args.language_model == 'opt':
-            self.tokenizer = AutoTokenizer.from_pretrained(OPT_MODEL)
+            self.tokenizer = AutoTokenizer.from_pretrained(OPT_MODEL, use_fast=False)
 
         self.models = {}
         self.prefix_length = args.prefix_length
         for key, weights_path in WEIGHTS_PATHS.items():
-            
-            model = ClipCaptionModel(args)
-            model.load_state_dict(torch.load(weights_path, map_location=CPU))
-            model = model.eval()
-            # model = model.to(self.device)
-            self.models[key] = model
+            if args.checkpoint == key[-3:]:
+                model = ClipCaptionModel(args)
+                model.load_state_dict(torch.load(weights_path, map_location=CPU))
+                model = model.eval()
+                # model = model.to(self.device)
+                self.models[key] = model
 
     @cog.input("image", type=cog.Path, help="Input image")
     @cog.input(
@@ -95,7 +97,7 @@ class Predictor(cog.Predictor):
         default=False,
         help="Whether to apply beam search to generate the output text",
     )
-    def predict(self, image, model, use_beam_search):
+    def predict(self, image, model):
         """Run a single prediction on the model"""
         image = io.imread(image)
         model = self.models[model]
@@ -107,7 +109,7 @@ class Predictor(cog.Predictor):
             )
             prefix_embed = model.clip_project(prefix).reshape(1, self.prefix_length, -1)
             
-        return generate(model, self.tokenizer, prefix_embed, self.device1)
+        return generate(model, self.tokenizer, prefix_embed, self.device1), prefix_embed.detach().to(CPU)
 
 
 class MlpTransformer(nn.Module):
@@ -260,15 +262,14 @@ class ClipCaptionModel(nn.Module):
         self.prefix_size = prefix_size
         self.clip_length = clip_length
         self.num_layers = num_layers
-        self.device1, device2, device3 = make_device(args)
-        pn1, pn2 = int(args.pn[0]), int(args.pn[1:])
+        self.device1, device2, device3, pn1, pn2 = make_device_pn(device=args.device, pn=args.pn)
         
         if self.args.language_model == 'gpt2':
             self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
             self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
         elif self.args.language_model == 'opt':
             print('clipcaption - LM : OPT')
-            self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL)
+            self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL) #, torch_dtype=torch.float16)
             self.gpt_embedding_size = self.gpt.model.decoder.embed_tokens.weight.shape[1]
             self.gpt.model.decoder.setting_device(device1=self.device1, device2=device2, device3=device3, pn1=pn1, pn2=pn2)
             
@@ -286,64 +287,79 @@ class ClipCaptionPrefix(ClipCaptionModel):
         self.gpt.eval()
         return self
 
-def make_device(args):
-    device_num = len(args.device)
+def make_device_pn(device, pn):
+    device_num = len(device)
     devices = []
     for i in range(device_num):
-        device = "cuda:" + args.device[i]
-        devices.append(torch.device(device))
+        device_name = "cuda:" + device[i]
+        devices.append(torch.device(device_name))
     
     assert len(devices) < 4
+    assert len(pn) < 5
+
     if len(devices) == 1:
         devices *= 3
         device1, device2, device3 = devices
+        pn1, pn2 = 12, 12
     elif len(devices) == 2:
         device1 = devices[0]
         device2 = devices[1]
         device3 = devices[1]
+        pn1, pn2 = int(pn), 12
     else:
         device1, device2, device3 = devices
-    return device1, device2, device3
+        length = len(pn)
+        if length < 4:
+            pn1, pn2 = int(pn[0]), int(pn[1:])
+        else:
+            pn1, pn2 = int(pn[:2]), int(pn[2:])
+            
+    return device1, device2, device3, pn1, pn2
 
-
-def generate(model, tokenizer, prefix_embed, device1,
-             use_nucleus_sampling=False,
-             num_beams=5,
-             max_length=30,
-             min_length=1,
-             top_p=0.9,
-             repetition_penalty=1.5,
-             length_penalty=1.0,
-             num_captions=1,
-             temperature=1,
-             prompt=""):
+def generate(
+        model, tokenizer, prefix_embed, device1,
+        use_nucleus_sampling=False,
+        num_beams=5,
+        max_length=30,
+        min_length=1,
+        top_p=0.9,
+        repetition_penalty=1.0,
+        length_penalty=1.0,
+        num_captions=1,
+        temperature=1,
+        prompt="a photo of"
+    ):
     
-    atts_opt = torch.ones(prefix_embed.size()[:-1], dtype=torch.long).to(device1)
-    opt_tokens = tokenizer([prompt], return_tensors='pt').to(device1)
-    input_ids = opt_tokens.input_ids
-    query_embeds = prefix_embed
-    attention_mask = torch.cat([atts_opt, opt_tokens.attention_mask], dim=1)
-    
-    outputs = model.gpt.generate(
-                    input_ids=input_ids,
-                    query_embeds=query_embeds,
-                    attention_mask=attention_mask,
-                    do_sample=use_nucleus_sampling,
-                    top_p=top_p,
-                    temperature=temperature,
-                    num_beams=num_beams,
-                    max_new_tokens=max_length,
-                    min_length=min_length,
-                    eos_token_id=tokenizer('\n', add_special_tokens=False).input_ids[0],
-                    repetition_penalty=repetition_penalty,
-                    length_penalty=length_penalty,
-                    num_return_sequences=num_captions,
-                )
-    
-    prompt_length = input_ids.shape[1]
-    output_text = tokenizer.batch_decode(
-            outputs[:, prompt_length:], skip_special_tokens=True
-        )
-    output_text = [text.strip() for text in output_text]
-    
-    return output_text[0]
+    with torch.cuda.amp.autocast(
+        enabled=(prefix_embed.device != torch.device("cpu"))
+    ):
+        eos_token_id = tokenizer("\n", add_special_tokens=False).input_ids[0]
+        atts_opt = torch.ones(prefix_embed.size()[:-1], dtype=torch.long).to(device1)
+        opt_tokens = tokenizer([prompt], return_tensors='pt').to(device1)
+        input_ids = opt_tokens.input_ids
+        query_embeds = prefix_embed
+        attention_mask = torch.cat([atts_opt, opt_tokens.attention_mask], dim=1)
+        
+        outputs = model.gpt.generate(
+                        input_ids=input_ids,
+                        query_embeds=query_embeds,
+                        attention_mask=attention_mask,
+                        do_sample=use_nucleus_sampling,
+                        top_p=top_p,
+                        temperature=temperature,
+                        num_beams=num_beams,
+                        max_new_tokens=max_length,
+                        min_length=min_length,
+                        eos_token_id=eos_token_id,
+                        repetition_penalty=repetition_penalty,
+                        length_penalty=length_penalty,
+                        num_return_sequences=num_captions,
+                    )
+        
+        prompt_length = input_ids.shape[1]
+        output_text = tokenizer.batch_decode(
+                outputs[:, prompt_length:], skip_special_tokens=True
+            )
+        output_text = [text.strip() for text in output_text]
+        
+        return output_text[0]

@@ -3,8 +3,7 @@ import torch.nn as nn
 from torch.nn import functional as nnf
 from torch.utils.data import Dataset, DataLoader
 from enum import Enum
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, get_linear_schedule_with_warmup
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import GPT2LMHeadModel, get_linear_schedule_with_warmup
 from modeling_opt_pp import OPTForCausalLM
 from transformers import AutoTokenizer
 from tqdm import tqdm
@@ -15,7 +14,7 @@ import argparse
 import json
 from typing import Tuple, Optional, Union
 
-import wandb
+# import wandb
 
 OPT_MODEL = 'facebook/opt-2.7b'
 
@@ -55,7 +54,7 @@ class ClipCocoDataset(Dataset):
     def __init__(self, data_path: str,  prefix_length: int, gpt2_type: str = OPT_MODEL, # edit
                  normalize_prefix=False):
         # self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
-        self.tokenizer = AutoTokenizer.from_pretrained(gpt2_type, use_fast=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(gpt2_type, use_fast=False)
         self.prefix_length = prefix_length
         self.normalize_prefix = normalize_prefix
         with open(data_path, 'rb') as f:
@@ -231,17 +230,20 @@ class ClipCaptionModel(nn.Module):
 
     def forward(self, tokens: torch.Tensor, prefix: torch.Tensor, mask: Optional[torch.Tensor] = None,
                 labels: Optional[torch.Tensor] = None):
-        if self.args.language_model == 'gpt2':
-            embedding_text = self.gpt.transformer.wte(tokens)
-        elif self.args.language_model == 'opt':
-            embedding_text = self.gpt.model.decoder.embed_tokens(tokens)
-        prefix_projections = self.clip_project(prefix).view(-1, self.args.prefix_length, self.gpt_embedding_size)
-        embedding_cat = torch.cat((prefix_projections, embedding_text.to(self.device1)), dim=1)
-        if labels is not None:
-            dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
-            labels = torch.cat((dummy_token, tokens), dim=1)
-        out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
-        return out
+        with torch.cuda.amp.autocast(
+            enabled=(tokens.device != torch.device("cpu"))
+        ):
+            if self.args.language_model == 'gpt2':
+                embedding_text = self.gpt.transformer.wte(tokens)
+            elif self.args.language_model == 'opt':
+                embedding_text = self.gpt.model.decoder.embed_tokens(tokens)
+            prefix_projections = self.clip_project(prefix).view(-1, self.args.prefix_length, self.gpt_embedding_size)
+            embedding_cat = torch.cat((prefix_projections, embedding_text.to(self.device1)), dim=1)
+            if labels is not None:
+                dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
+                labels = torch.cat((dummy_token, tokens), dim=1)
+            out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
+            return out
 
     def __init__(self, args, clip_length: Optional[int] = 32, prefix_size: int = 512, num_layers: int = 8):
         super(ClipCaptionModel, self).__init__()
@@ -249,15 +251,14 @@ class ClipCaptionModel(nn.Module):
         self.prefix_size = prefix_size
         self.clip_length = clip_length
         self.num_layers = num_layers
-        self.device1, device2, device3 = make_device(args)
-        pn1, pn2 = int(args.pn[0]), int(args.pn[1:])
+        self.device1, device2, device3, pn1, pn2 = make_device_pn(device=args.device, pn=args.pn)
         
         if self.args.language_model == 'gpt2':
             self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
             self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
         elif self.args.language_model == 'opt':
             print('clipcaption - LM : OPT')
-            self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL)
+            self.gpt = OPTForCausalLM.from_pretrained(OPT_MODEL, torch_dtype=torch.float16)
             self.gpt_embedding_size = self.gpt.model.decoder.embed_tokens.weight.shape[1]
             self.gpt.model.decoder.setting_device(device1=self.device1, device2=device2, device3=device3, pn1=pn1, pn2=pn2)
             
@@ -275,13 +276,6 @@ class ClipCaptionPrefix(ClipCaptionModel):
         self.gpt.eval()
         return self
 
-def make_device(args):
-    device_num = len(args.device)
-    devices = []
-    for i in range(device_num):
-        device = "cuda:" + args.device[i]
-        devices.append(torch.device(device))
-    return devices
 
 def save_config(args: argparse.Namespace):
     config = {}
@@ -323,19 +317,20 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
         os.makedirs(output_dir)
     # model = model.to(device)
     model.train()
-    optimizer = AdamW(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
+    # minimum_loss = None
     # save_config(args)
     for epoch in range(epochs):
         print(f">>> Training epoch {epoch}")
         sys.stdout.flush()
         progress = tqdm(total=len(train_dataloader), desc=output_prefix)
-        for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
+        for idx, (tokens, mask, prefix) in enumerate(train_dataloader): # 41, 512, 73
             model.zero_grad()
-            tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
+            tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float16)
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, dataset.prefix_length - 1: -1].to(device)
             loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
@@ -344,75 +339,94 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
             scheduler.step()
             optimizer.zero_grad()
             
-            wandb.log({'loss':loss.item()})
+            # wandb.log({'loss':loss.item()})
             progress.set_postfix({"loss": loss.item()})
             progress.update()
-            if (idx + 1) % 10000 == 0:
-                torch.save(
-                    model.state_dict(),
-                    os.path.join(output_dir, f"{output_prefix}_latest.pt"),
-                )
+
+            # if (idx + 1) % 10000 == 0:
+            #     torch.save(
+            #         model.state_dict(),
+            #         os.path.join(output_dir, f"{output_prefix}_latest.pt"),
+            #     )
+        # if not minimum_loss:
+        #         minimum_loss = loss.item()
+        # elif loss.item() < minimum_loss:
+        #     torch.save(
+        #     model.state_dict(),
+        #     os.path.join(output_dir, f"model_{output_prefix}_min_loss.pt"),
+        #     )
         progress.close()
         if epoch % args.save_every == 0 or epoch == epochs - 1:
             torch.save(
                 model.state_dict(),
-                os.path.join(output_dir, f"model_{output_prefix}-{epoch:03d}.pt"),
+                os.path.join(output_dir, f"model_{output_prefix}.pt"),
             )
             torch.save(
                 scheduler.state_dict(),
-                os.path.join(output_dir, f"schedular_{output_prefix}-{epoch:03d}.pt"),
+                os.path.join(output_dir, f"schedular_{output_prefix}.pt"),
             )
             torch.save(
                 optimizer.state_dict(),
-                os.path.join(output_dir, f"optimizer_{output_prefix}-{epoch:03d}.pt"),
+                os.path.join(output_dir, f"optimizer_{output_prefix}.pt"),
             )
     return model
 
-def make_device(args):
-    device_num = len(args.device)
+def make_device_pn(device, pn):
+    device_num = len(device)
     devices = []
+
     for i in range(device_num):
-        device = "cuda:" + args.device[i]
-        devices.append(torch.device(device))
+        device_name = "cuda:" + device[i]
+        devices.append(torch.device(device_name))
     
     assert len(devices) < 4
+    assert len(pn) < 5
+
     if len(devices) == 1:
         devices *= 3
         device1, device2, device3 = devices
+        pn1, pn2 = 12, 12
     elif len(devices) == 2:
         device1 = devices[0]
         device2 = devices[1]
         device3 = devices[1]
+        pn1, pn2 = int(pn), 12
     else:
         device1, device2, device3 = devices
-    return device1, device2, device3
+        length = len(pn)
+        if length < 4:
+            pn1, pn2 = int(pn[0]), int(pn[1:])
+        else:
+            pn1, pn2 = int(pn[:2]), int(pn[2:])
+            
+    return device1, device2, device3, pn1, pn2
 
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', default='./data/coco/oscar_split_ViT-B_32_train.pkl')
-    parser.add_argument('--out_dir', default='./checkpoints')
+    parser.add_argument('--out_dir', default='/data1/checkpoint/clipcap')
     parser.add_argument('--prefix', default='coco_prefix', help='prefix for saved filenames')
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--save_every', type=int, default=1)
     parser.add_argument('--prefix_length', type=int, default=32)
-    parser.add_argument('--prefix_length_clip', type=int, default=32)
+    # parser.add_argument('--prefix_length_clip', type=int, default=32)
     parser.add_argument('--bs', type=int, default=40)
     parser.add_argument('--only_prefix', dest='only_prefix', action='store_true')
     parser.add_argument('--mapping_type', type=str, default='transformer', help='mlp/transformer')
     parser.add_argument('--num_layers', type=int, default=8)
     parser.add_argument('--is_rn', dest='is_rn', action='store_true')
     parser.add_argument('--normalize_prefix', dest='normalize_prefix', action='store_true')
-    parser.add_argument('--device', default='12')
+    parser.add_argument('--device', type=str, default='12')
     parser.add_argument('--language_model', type=str, default='opt', help='gpt2/opt')
-    parser.add_argument('--pn', default='47', help='splitting OPT layer for pipeline parallelization')
+    parser.add_argument('--pn', default='411', help='splitting OPT layer for pipeline parallelization')
     args = parser.parse_args()
 
     prefix_length = args.prefix_length
-    
-    wandb.init(project='ClipCap')
-    
+
+    # wandb.init(project='ClipCap')
+
     dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
     prefix_dim = 640 if args.is_rn else 512
     args.mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[args.mapping_type]
