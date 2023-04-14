@@ -352,60 +352,60 @@ class OPTDecoderLayer(nn.Module):
         """
 
         residual = hidden_states
+        with torch.autocast("cuda"):
+            # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+            if self.do_layer_norm_before:
+                hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
-        if self.do_layer_norm_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+            # Self Attention
+            hidden_states, self_attn_weights, present_key_value = self.self_attn(
+                hidden_states=hidden_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+            )
+            hidden_states = nn.functional.dropout(
+                hidden_states, p=self.dropout, training=self.training
+            )
+            hidden_states = residual + hidden_states
 
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            past_key_value=past_key_value,
-            attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
-        hidden_states = residual + hidden_states
+            # 350m applies layer norm AFTER attention
+            if not self.do_layer_norm_before:
+                hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # 350m applies layer norm AFTER attention
-        if not self.do_layer_norm_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+            # Fully Connected
+            hidden_states_shape = hidden_states.shape
+            hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
+            residual = hidden_states
 
-        # Fully Connected
-        hidden_states_shape = hidden_states.shape
-        hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
-        residual = hidden_states
+            # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+            if self.do_layer_norm_before:
+                hidden_states = self.final_layer_norm(hidden_states)
 
-        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
-        if self.do_layer_norm_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+            hidden_states = self.fc1(hidden_states)
+            hidden_states = self.activation_fn(hidden_states)
 
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+            hidden_states = self.fc2(hidden_states)
+            hidden_states = nn.functional.dropout(
+                hidden_states, p=self.dropout, training=self.training
+            )
 
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+            hidden_states = (residual + hidden_states).view(hidden_states_shape)
 
-        hidden_states = (residual + hidden_states).view(hidden_states_shape)
+            # 350m applies layer norm AFTER attention
+            if not self.do_layer_norm_before:
+                hidden_states = self.final_layer_norm(hidden_states)
 
-        # 350m applies layer norm AFTER attention
-        if not self.do_layer_norm_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+            outputs = (hidden_states,)
 
-        outputs = (hidden_states,)
+            if output_attentions:
+                outputs += (self_attn_weights,)
 
-        if output_attentions:
-            outputs += (self_attn_weights,)
+            if use_cache:
+                outputs += (present_key_value,)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
+            return outputs
 
 
 OPT_START_DOCSTRING = r"""
@@ -817,31 +817,32 @@ class OPTDecoder(OPTPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        if self.final_layer_norm is not None:
-            self.final_layer_norm.to(self.device3)
-            hidden_states = self.final_layer_norm(hidden_states)
+        with torch.autocast("cuda"):
+            if self.final_layer_norm is not None:
+                self.final_layer_norm.to(self.device3)
+                hidden_states = self.final_layer_norm(hidden_states)
 
-        if self.project_out is not None:
-            self.project_out.to(self.device3)
-            hidden_states = self.project_out(hidden_states)
+            if self.project_out is not None:
+                self.project_out.to(self.device3)
+                hidden_states = self.project_out(hidden_states)
 
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+            # add hidden states from the last decoder layer
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
-                if v is not None
+            next_cache = next_decoder_cache if use_cache else None
+            if not return_dict:
+                return tuple(
+                    v
+                    for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                    if v is not None
+                )
+            return BaseModelOutputWithPast(
+                last_hidden_state=hidden_states,
+                past_key_values=next_cache,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
             )
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
 
 
 @add_start_docstrings(
@@ -1079,7 +1080,8 @@ class OPTForCausalLM(OPTPreTrainedModel):
             return_dict=return_dict,
         )
         device = self.model.decoder.device1
-        logits = self.lm_head(outputs[0].to(device)).contiguous()
+        with torch.autocast("cuda"):
+            logits = self.lm_head(outputs[0].to(device)).contiguous()
 
         loss = None
         if labels is not None:

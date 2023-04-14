@@ -62,28 +62,32 @@ class BaseDataset(Dataset):
             
 class Hprod(nn.Module):
     def __init__(self, num_feature, num_query_token, query_dimension, device):
-        self.weights = nn.Parameter(torch.Tensor(1, num_feature, num_query_token, query_dimension)).to(device)    
-
+        super().__init__()
+        self.weights = nn.Parameter(torch.randn(1, num_feature, num_query_token, query_dimension, device=device))
+        
     def forward(self, features):
         prod = features * self.weights
-        output = torch.sum(prod, dim=1, keepdim=True)
+        output = torch.sum(prod, dim=1)
         return output
     
 OPT_MODEL = 'facebook/opt-2.7b'
 MODEL = {
     "cnn" : nn.Conv2d,
     "hprod" : Hprod,
-    "mix_qdim" : nn.Linear,
+    "mix-qdim" : nn.Linear,
     }
+
+CNN = [*MODEL][0]
+HPROD = [*MODEL][1]
+MIX = [*MODEL][2]
 
 class ConnectLayer(nn.Module):
     def __init__(
         self,
-        connect_model_key = "cnn",
+        connect_model_key = CNN,
         num_feature = 3,
         num_query_token = 32,
         query_dimension = 2560,
-        batch_size = 16,
         prompt="a photo of",
         max_txt_len=32,
         device = "123",
@@ -96,9 +100,9 @@ class ConnectLayer(nn.Module):
         self.device1, device2, device3, pn1, pn2 = make_device_pn(device=device, pn=pn)
         assert pn1>0
 
-        if self.model_key == "cnn":
+        if self.model_key == CNN:
             self.connect_model = MODEL[self.model_key](
-                in_channels=2,
+                in_channels=num_feature,
                 out_channels=1,
                 kernel_size=1,
                 stride=1,
@@ -106,21 +110,21 @@ class ConnectLayer(nn.Module):
                 bias=False,
                 device=self.device1
             )
-        elif self.model_key == "hprod":
+        elif self.model_key == HPROD:
             self.connect_model = MODEL[self.model_key](
                 num_feature=num_feature,
                 num_query_token=num_query_token,
                 query_dimension=query_dimension,
                 device=self.device1
             )
-        elif self.model_key == "mix_qdim":
+        elif self.model_key == MIX:
             self.connect_model = MODEL[self.model_key](
-                in_feature=num_query_token * query_dimension,
+                in_features=num_feature * query_dimension,
                 out_features=query_dimension,
                 bias=False,
                 device=self.device1
             )
-
+        
         self.opt_model = OPTForCausalLM.from_pretrained(OPT_MODEL, torch_dtype=torch.float16)
         self.opt_tokenizer = AutoTokenizer.from_pretrained(OPT_MODEL, use_fast=False)
 
@@ -135,7 +139,7 @@ class ConnectLayer(nn.Module):
         self.prompt = prompt
         prompt_tokens = self.opt_tokenizer(self.prompt, return_tensors="pt")
         self.prompt_length = prompt_tokens.attention_mask.sum(1)
-        self.batch_size = batch_size
+        self.num_feature = num_feature
         self.num_query_token = num_query_token
         self.query_dimension = query_dimension
         self.max_txt_len = max_txt_len
@@ -143,24 +147,24 @@ class ConnectLayer(nn.Module):
     def forward(self, samples):
         features = samples["features"]
         features = features.to(self.device1)
-        if self.model_key == "cnn":
-            query_embeds = self.connect_model(features)
-        elif self.model_key == "hprod":
-            query_embeds = self.connect_model(features)
-        elif self.model_key == "mix_qdim":
-            features = features.permute(1, 2).view(
-                self.batch_size,
-                self.num_query_token,
-                self.num_query_token * self.query_dimension
-            )
-            query_embeds = self.connect_model(features).unsqueeze(1)
+        with torch.autocast("cuda"):
+            if self.model_key == CNN:
+                query_embeds = self.connect_model(features).squeeze(1)
+            elif self.model_key == HPROD:
+                query_embeds = self.connect_model(features).squeeze(1)
+            elif self.model_key == MIX:
+                features = features.transpose(1, 2).reshape(
+                    features.shape[0],
+                    self.num_query_token,
+                    self.num_feature * self.query_dimension
+                )
+                query_embeds = self.connect_model(features)
         
         atts_opt = torch.ones(query_embeds.size()[:-1], dtype=torch.long).to(features.device)
 
         self.opt_tokenizer.padding_side = "right"
         
-        text = [samples["text_input"] + "\n"]
-        # text = [t + "\n" for t in [samples["text_input"]]]
+        text = [t + "\n" for t in samples["text_input"]]
 
         opt_tokens = self.opt_tokenizer(
             text,
@@ -224,7 +228,8 @@ class CaptionDataset_WithFeature(BaseDataset, __DisplMixin):
 
         # feature_paths = ['/data1/IC/coco_features/blip2OPT', '/data1/IC/coco_features/clipcap']
 
-        features = [ torch.load( os.path.join(path, pt_file) ).squeeze(0)  for path in self.feature_paths  ] # [1 x 32 x 2560 이 num_features 만큼] 
+        load_features = [ torch.load( os.path.join(path, pt_file) ).to(torch.device("cpu"))  for path in self.feature_paths  ]
+        features = [feature.squeeze(0) if len(feature.shape) == 3 else feature for feature in load_features] # [1 x 32 x 2560 이 num_features 만큼] 
         features = torch.stack(features) # num_features x 32 x 2560
 
         # image_path = os.path.join(self.vis_root, ann["image"])
